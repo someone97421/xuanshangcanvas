@@ -1078,27 +1078,27 @@
         // --- 默认配置 ---
         const DEFAULT_BASE_URL = 'https://ai.comfly.chat';
         
-        // 即梦API配置（代理地址，默认本地5100端口）
-        const JIMENG_API_BASE_URL = 'http://localhost:5100';
-        const JIMENG_SESSION_ID = '7a16459fbd65d9c87b4ea44d3318f5fa';
-        const SEEDANCE_API_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3';
+        const ARK_MEDIA_API_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3';
+        const RUNNINGHUB_API_BASE_URL = 'https://www.runninghub.ai/openapi/v2';
 
         const DEFAULT_API_CONFIGS = [
             { id: 'gemini-3-pro', provider: 'Gemini 3 Pro', modelName: 'gemini-3-pro-preview', type: 'Chat', key: '', url: DEFAULT_BASE_URL },
             { id: 'nano-banana', provider: 'Nano Banana', modelName: 'nano-banana', type: 'Image', key: '', url: DEFAULT_BASE_URL },
             { id: 'nano-banana-2', provider: 'Nano Banana 2', modelName: 'nano-banana-2', type: 'Image', key: '', url: DEFAULT_BASE_URL },
-            { id: 'jimeng-4.5', provider: 'Jimeng 4.5', modelName: 'jimeng-4.5', type: 'Image', key: '', url: JIMENG_API_BASE_URL },
-            { id: 'jimeng-4.1', provider: 'Jimeng 4.1', modelName: 'jimeng-4.1', type: 'Image', key: '', url: JIMENG_API_BASE_URL },
-            { id: 'jimeng-3.1', provider: 'Jimeng 3.1', modelName: 'jimeng-3.1', type: 'Image', key: '', url: JIMENG_API_BASE_URL },
-            { id: 'seedance-2.0', provider: 'Seedance 2.0', modelName: 'doubao-seedance-2-0-260128', type: 'Video', key: '', url: SEEDANCE_API_BASE_URL, durations: ['5s', '10s', '15s'] },
-            { id: 'seedance-2.0-fast', provider: 'Seedance 2.0 Fast', modelName: 'doubao-seedance-2-0-fast-260128', type: 'Video', key: '', url: SEEDANCE_API_BASE_URL, durations: ['5s', '10s', '15s'] },
+            { id: 'seedream-5.0', provider: 'Seedream 5.0', modelName: 'doubao-seedream-5-0-260128', type: 'Image', key: '', url: ARK_MEDIA_API_BASE_URL },
+            { id: 'seedream-4.5', provider: 'Seedream 4.5', modelName: 'doubao-seedream-4-5-251128', type: 'Image', key: '', url: ARK_MEDIA_API_BASE_URL },
+            { id: 'seedream-4.0', provider: 'Seedream 4.0', modelName: 'doubao-seedream-4-0-250828', type: 'Image', key: '', url: ARK_MEDIA_API_BASE_URL },
+            { id: 'rh-image-pro', provider: 'RH 全能图片 Pro', modelName: 'rhart-image-n-pro', type: 'Image', key: '', url: RUNNINGHUB_API_BASE_URL },
+            { id: 'rh-image-v2', provider: 'RH 全能图片 V2', modelName: 'rhart-image-n-g31-flash', type: 'Image', key: '', url: RUNNINGHUB_API_BASE_URL },
+            { id: 'seedance-2.0', provider: 'Seedance 2.0', modelName: 'doubao-seedance-2-0-260128', type: 'Video', key: '', url: ARK_MEDIA_API_BASE_URL, durations: ['5s', '10s', '15s'] },
+            { id: 'seedance-2.0-fast', provider: 'Seedance 2.0 Fast', modelName: 'doubao-seedance-2-0-fast-260128', type: 'Video', key: '', url: ARK_MEDIA_API_BASE_URL, durations: ['5s', '10s', '15s'] },
         ];
         const DEFAULT_TEMP_HOSTING_CONFIG = {
             provider: 'Litterbox 临时图床',
             url: 'https://litterbox.catbox.moe/resources/internals/api.php',
             expiry: '12h'
         };
-        const ALLOWED_API_CONFIG_IDS = ['gemini-3-pro', 'nano-banana', 'nano-banana-2', 'jimeng-4.5', 'jimeng-4.1', 'jimeng-3.1', 'seedance-2.0', 'seedance-2.0-fast'];
+        const ALLOWED_API_CONFIG_IDS = ['gemini-3-pro', 'nano-banana', 'nano-banana-2', 'seedream-5.0', 'seedream-4.5', 'seedream-4.0', 'rh-image-pro', 'rh-image-v2', 'seedance-2.0', 'seedance-2.0-fast'];
 
         const RATIOS = ['Auto', '1:1', '16:9', '9:16', '4:3', '3:4', '21:9', '3:2', '2:3'];
         const GROK_VIDEO_RATIOS = ['3:2', '2:3', '1:1'];
@@ -1211,14 +1211,18 @@ You must design a visual composition that tells the story through **8 distinct p
 
         const getRatiosForModel = (modelId) => {
             if (!modelId) return RATIOS;
+            if (modelId.includes('rh-image-pro')) return ['Auto', '1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '5:4', '4:5', '21:9'];
+            if (modelId.includes('rh-image-v2')) return ['Auto', '1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '5:4', '4:5', '21:9', '1:4', '4:1', '1:8', '8:1'];
             return RATIOS;
         };
         const RESOLUTIONS = ['Auto', '1K', '2K', '4K'];
         // 根据模型返回不同的分辨率选项
         const getResolutionsForModel = (modelId) => {
             if (!modelId) return RESOLUTIONS;
-            // jimeng-4.5模型只显示2K和4K两个选项
-            if (modelId.includes('jimeng-4.5')) return ['2K', '4K'];
+            if (modelId.includes('seedream-5.0')) return ['2K', '3K'];
+            if (modelId.includes('seedream-4.5')) return ['2K', '4K'];
+            if (modelId.includes('seedream-4.0')) return ['1K', '2K', '4K'];
+            if (modelId.includes('rh-image-')) return ['1K', '2K', '4K'];
             return RESOLUTIONS;
         }; 
         // Midjourney版本列表
@@ -1241,6 +1245,7 @@ You must design a visual composition that tells the story through **8 distinct p
             if (baseResolution === '1080P') { baseW = 1920; baseH = 1080; }
             else if (baseResolution === '720P') { baseW = 1280; baseH = 720; }
             else if (baseResolution === '2K') { baseW = 2048; baseH = 2048; }
+            else if (baseResolution === '3K') { baseW = 3072; baseH = 3072; }
             else if (baseResolution === '4K') { baseW = 3840; baseH = 2160; }
 
             if (ratio === 'Auto') {
@@ -1274,7 +1279,7 @@ You must design a visual composition that tells the story through **8 distinct p
             if (modelId.includes('minimax')) {
                 return { sizeStr: resolution === '4K' ? '1080p' : '720p', w, h };
             }
-            if (modelId.includes('jimeng') || modelId.includes('veo')) {
+            if (modelId.includes('veo')) {
                 return { sizeStr: ratio, w, h };
             }
             if (modelId.includes('grok')) {
@@ -1666,41 +1671,12 @@ You must design a visual composition that tells the story through **8 distinct p
                 let configs = saved ? JSON.parse(saved) : DEFAULT_API_CONFIGS;
                 configs = configs.filter(c => ALLOWED_API_CONFIG_IDS.includes(c.id));
                 
-                // 从localStorage读取保存的Session ID
-                // 第一次打开时如果没有保存的Session ID，使用空字符串（需要用户输入）
-                // 如果有保存的Session ID，则使用保存的值
-                const savedSessionId = localStorage.getItem('tapnow_jimeng_session_id');
-                const sessionIdToUse = savedSessionId || ''; // 如果没有保存的，使用空字符串，让用户输入
-                
-                // 确保即梦模型存在（如果不存在则添加）
-                const hasJimeng45 = configs.some(c => c.id === 'jimeng-4.5');
-                const hasJimeng41 = configs.some(c => c.id === 'jimeng-4.1');
-                const hasJimeng31 = configs.some(c => c.id === 'jimeng-3.1');
-                
-                if (!hasJimeng45 || !hasJimeng41 || !hasJimeng31) {
-                    const insertIndex = configs.length;
-                    if (!hasJimeng45) {
-                        configs.splice(insertIndex, 0, { id: 'jimeng-4.5', provider: 'Jimeng 4.5', modelName: 'jimeng-4.5', type: 'Image', key: sessionIdToUse, url: JIMENG_API_BASE_URL });
-                    }
-                    if (!hasJimeng41) {
-                        const jimeng45Index = configs.findIndex(c => c.id === 'jimeng-4.5');
-                        const nextIndex = jimeng45Index >= 0 ? jimeng45Index + 1 : insertIndex;
-                        configs.splice(nextIndex, 0, { id: 'jimeng-4.1', provider: 'Jimeng 4.1', modelName: 'jimeng-4.1', type: 'Image', key: sessionIdToUse, url: JIMENG_API_BASE_URL });
-                    }
-                    if (!hasJimeng31) {
-                        const jimeng41Index = configs.findIndex(c => c.id === 'jimeng-4.1');
-                        const nextIndex = jimeng41Index >= 0 ? jimeng41Index + 1 : insertIndex + 1;
-                        configs.splice(nextIndex, 0, { id: 'jimeng-3.1', provider: 'Jimeng 3.1', modelName: 'jimeng-3.1', type: 'Image', key: sessionIdToUse, url: JIMENG_API_BASE_URL });
-                    }
-                } else {
-                    // 如果模型已存在，更新所有jimeng模型的Session ID
-                    // 如果有保存的Session ID，使用保存的值；如果没有，使用空字符串（让用户输入）
-                    configs = configs.map(c => 
-                        (c.id.includes('jimeng') || c.provider?.includes('Jimeng'))
-                            ? { ...c, key: sessionIdToUse }
-                            : c
-                    );
-                }
+                const savedArkMediaKey = localStorage.getItem('tapnow_ark_media_api_key') || '';
+                configs = configs.map(c =>
+                    (c.id.includes('seedream') || c.id.includes('seedance'))
+                        ? { ...c, key: c.key || savedArkMediaKey }
+                        : c
+                );
 
                 const mergedConfigs = DEFAULT_API_CONFIGS.map(defaultConfig => {
                     const savedConfig = configs.find(c => c.id === defaultConfig.id);
@@ -1719,12 +1695,6 @@ You must design a visual composition that tells the story through **8 distinct p
                 }
             });
             
-            // 即梦图生图使用本地文件设置（默认true，强制使用本地文件而不是URL）
-            const [jimengUseLocalFile, setJimengUseLocalFile] = useState(() => {
-                const saved = localStorage.getItem('tapnow_jimeng_use_local_file');
-                return saved !== null ? saved === 'true' : true; // 默认true
-            });
-
             // 项目名称状态
             const [projectName, setProjectName] = useState(() => {
                 try {
@@ -1872,6 +1842,8 @@ You must design a visual composition that tells the story through **8 distinct p
             const [chatSessionDropdownOpen, setChatSessionDropdownOpen] = useState(false);
             const [activeTool, setActiveTool] = useState('select');
             const [activeDropdown, setActiveDropdown] = useState(null);
+            const [imageMentionSelectedIndex, setImageMentionSelectedIndex] = useState(0);
+            const [imageMentionPopup, setImageMentionPopup] = useState({ visible: false, nodeId: null, left: 0, top: 0, width: 260 });
             const [videoMentionSelectedIndex, setVideoMentionSelectedIndex] = useState(0);
             const [videoMentionPopup, setVideoMentionPopup] = useState({ visible: false, nodeId: null, left: 0, top: 0, width: 260 });
             const [apiTesting, setApiTesting] = useState(null);
@@ -1893,14 +1865,17 @@ You must design a visual composition that tells the story through **8 distinct p
             const pendingPanUpdate = useRef(null); // 待处理的画布拖动更新
             const multiNodeDragStartPos = useRef(null); // 多节点拖动起始位置，用于防止累积误差
             const lastZoomRef = useRef(null); // 跟踪上次的 zoom 值，用于检测缩放切换
+            const imagePromptTextareaRefs = useRef({});
+            const imagePromptSelectionRanges = useRef({});
+            const imagePromptReplaceTargets = useRef({});
+            const imagePromptMentionTrigger = useRef({}); // 记录 @ 触发位置
             const videoPromptTextareaRefs = useRef({});
             const videoPromptSelectionRanges = useRef({});
             const videoPromptReplaceTargets = useRef({});
+            const videoPromptMentionTrigger = useRef({}); // 记录 @ 触发位置
 
             useEffect(() => { 
-                // 保存时过滤掉jimeng-4.5配置
-                const filteredConfigs = apiConfigs.filter(c => c.id !== 'jimeng-4.5');
-                localStorage.setItem('tapnow_api_configs', JSON.stringify(filteredConfigs)); 
+                localStorage.setItem('tapnow_api_configs', JSON.stringify(apiConfigs));
             }, [apiConfigs]);
             
             // 全局 Delete 键删除节点
@@ -3305,6 +3280,112 @@ You must design a visual composition that tells the story through **8 distinct p
                     .replace(/@audio(\d+)/gi, '（音频$1）');
             }, []);
 
+            const formatImagePromptMentions = useCallback((text) => {
+                if (!text) return '';
+                return text.replace(/@img(\d+)/gi, '参考图$1');
+            }, []);
+
+            const getImageMentionChipLabel = useCallback((asset) => {
+                return `参考图${asset.index}`;
+            }, []);
+
+            const createImageMentionChipElement = useCallback((asset) => {
+                const chip = document.createElement('span');
+                chip.className = 'image-mention-chip inline-flex items-center rounded-md border px-1.5 py-0.5 mx-[1px] my-[1px] align-baseline cursor-pointer select-none text-[11px] leading-4 border-emerald-500/30 bg-emerald-500/12 text-emerald-300';
+                chip.contentEditable = 'false';
+                chip.dataset.type = asset.type;
+                chip.dataset.index = String(asset.index);
+                chip.dataset.nodeId = asset.nodeId;
+                chip.dataset.token = asset.token;
+                chip.textContent = getImageMentionChipLabel(asset);
+                return chip;
+            }, [getImageMentionChipLabel]);
+
+            const serializeImagePromptNode = useCallback((rootNode, mode = 'token') => {
+                let text = '';
+                const walk = (node) => {
+                    if (node.nodeType === Node.TEXT_NODE) {
+                        text += node.textContent || '';
+                        return;
+                    }
+                    if (node.nodeType !== Node.ELEMENT_NODE) return;
+                    if (node.classList.contains('image-mention-chip')) {
+                        text += mode === 'formatted'
+                            ? `参考图${node.dataset.index || ''}`
+                            : (node.dataset.token || `@img${node.dataset.index || ''}`);
+                        return;
+                    }
+                    if (node.tagName === 'BR') {
+                        text += '\n';
+                        return;
+                    }
+                    Array.from(node.childNodes).forEach(walk);
+                    if (node.tagName === 'DIV' || node.tagName === 'P') text += '\n';
+                };
+                Array.from(rootNode.childNodes || []).forEach(walk);
+                return text.replace(/\u00A0/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+            }, []);
+
+            const renderImagePromptTextToHtml = useCallback((promptText, assets) => {
+                const assetByToken = new Map(assets.map(asset => [asset.token.toLowerCase(), asset]));
+                return (promptText || '')
+                    .replace(/@img\d+/gi, (match) => {
+                        const asset = assetByToken.get(match.toLowerCase());
+                        if (!asset) return '';
+                        return createImageMentionChipElement(asset).outerHTML;
+                    })
+                    .replace(/\n/g, '<br>');
+            }, [createImageMentionChipElement]);
+
+            const normalizeImagePromptState = useCallback((promptHtml, promptText, assets) => {
+                const container = document.createElement('div');
+                container.innerHTML = promptHtml || renderImagePromptTextToHtml(promptText || '', assets);
+                const assetByNodeId = new Map(assets.map(asset => [asset.nodeId, asset]));
+                const assetByToken = new Map(assets.map(asset => [asset.token.toLowerCase(), asset]));
+
+                const walk = (parent) => {
+                    Array.from(parent.childNodes).forEach((child) => {
+                        if (child.nodeType === Node.TEXT_NODE) {
+                            const content = child.textContent || '';
+                            if (!content.includes('@')) return;
+                            const html = renderImagePromptTextToHtml(content, assets);
+                            if (html !== content.replace(/\n/g, '<br>')) {
+                                const wrapper = document.createElement('span');
+                                wrapper.innerHTML = html;
+                                child.replaceWith(...Array.from(wrapper.childNodes));
+                            }
+                            return;
+                        }
+                        if (child.nodeType !== Node.ELEMENT_NODE) return;
+                        if (child.classList.contains('image-mention-chip')) {
+                            const token = child.dataset.token?.toLowerCase();
+                            const mappedAsset = assetByNodeId.get(child.dataset.nodeId) || assetByToken.get(token);
+                            if (!mappedAsset) {
+                                if (child.nextSibling && child.nextSibling.nodeType === Node.TEXT_NODE) {
+                                    child.nextSibling.textContent = (child.nextSibling.textContent || '').replace(/^\u00A0/, '');
+                                }
+                                child.remove();
+                                return;
+                            }
+                            child.dataset.type = mappedAsset.type;
+                            child.dataset.index = String(mappedAsset.index);
+                            child.dataset.nodeId = mappedAsset.nodeId;
+                            child.dataset.token = mappedAsset.token;
+                            child.textContent = getImageMentionChipLabel(mappedAsset);
+                            return;
+                        }
+                        walk(child);
+                    });
+                };
+
+                walk(container);
+
+                return {
+                    html: container.innerHTML,
+                    text: serializeImagePromptNode(container, 'token')
+                };
+            }, [getImageMentionChipLabel, renderImagePromptTextToHtml, serializeImagePromptNode]);
+
             const getVideoMentionTagName = useCallback((type) => {
                 return type === 'image' ? 'img' : type === 'video' ? 'video' : 'audio';
             }, []);
@@ -3424,6 +3505,155 @@ You must design a visual composition that tells the story through **8 distinct p
                 });
             }, [serializeVideoPromptNode, updateNodeSettings]);
 
+            const syncImagePromptFromEditor = useCallback((nodeId) => {
+                const editor = imagePromptTextareaRefs.current[nodeId];
+                if (!editor) return;
+                updateNodeSettings(nodeId, {
+                    prompt: serializeImagePromptNode(editor, 'token'),
+                    promptHtml: editor.innerHTML
+                });
+            }, [serializeImagePromptNode, updateNodeSettings]);
+
+            const saveImagePromptSelection = useCallback((nodeId) => {
+                const editor = imagePromptTextareaRefs.current[nodeId];
+                const selection = window.getSelection();
+                if (!editor || !selection || selection.rangeCount === 0) return;
+                const range = selection.getRangeAt(0);
+                if (!editor.contains(range.startContainer)) return;
+                imagePromptSelectionRanges.current[nodeId] = range.cloneRange();
+            }, []);
+
+            const updateImageMentionPopupPosition = useCallback((nodeId) => {
+                const editor = imagePromptTextareaRefs.current[nodeId];
+                if (!editor) return;
+                const rect = editor.getBoundingClientRect();
+                setImageMentionPopup(prev => ({
+                    ...prev,
+                    visible: true,
+                    nodeId,
+                    left: rect.left,
+                    top: rect.bottom + 6,
+                    width: Math.max(240, Math.min(320, rect.width))
+                }));
+            }, []);
+
+            const openImageMentionPopup = useCallback((nodeId, options = {}) => {
+                if (!options?.keepReplaceTarget) {
+                    delete imagePromptReplaceTargets.current[nodeId];
+                }
+                setImageMentionSelectedIndex(0);
+                setActiveDropdown({ nodeId, type: 'imageMention' });
+                requestAnimationFrame(() => updateImageMentionPopupPosition(nodeId));
+            }, [updateImageMentionPopupPosition]);
+
+            const closeImageMentionPopup = useCallback((nodeId = null, options = {}) => {
+                const preserveReplaceTarget = options?.preserveReplaceTarget === true;
+                setActiveDropdown((prev) => {
+                    if (!prev || prev.type !== 'imageMention') return prev;
+                    if (nodeId && prev.nodeId !== nodeId) return prev;
+                    return null;
+                });
+                if (!preserveReplaceTarget && (!nodeId || imagePromptReplaceTargets.current[nodeId])) {
+                    if (nodeId) delete imagePromptReplaceTargets.current[nodeId];
+                    else imagePromptReplaceTargets.current = {};
+                }
+                // 清理 mentionTrigger
+                if (nodeId) delete imagePromptMentionTrigger.current[nodeId];
+                else imagePromptMentionTrigger.current = {};
+                setImageMentionPopup(prev => nodeId && prev.nodeId !== nodeId ? prev : { ...prev, visible: false, nodeId: null });
+            }, []);
+
+            const insertImageMentionToken = useCallback((nodeId, assetToken) => {
+                const editor = imagePromptTextareaRefs.current[nodeId];
+                const asset = getConnectedReferenceAssets(nodeId)
+                    .filter(item => item.type === 'image')
+                    .find(item => item.token === assetToken);
+                if (!editor || !asset) return;
+
+                const selection = window.getSelection();
+                const chip = createImageMentionChipElement(asset);
+                
+                // 优先处理替换目标（点击已有chip进行替换）
+                const replaceTarget = imagePromptReplaceTargets.current[nodeId];
+                let currentReplaceTarget = null;
+                if (replaceTarget) {
+                    if (editor.contains(replaceTarget)) {
+                        currentReplaceTarget = replaceTarget;
+                    } else if (replaceTarget.dataset?.token) {
+                        // 尝试通过token和nodeId重新查找
+                        currentReplaceTarget = editor.querySelector(
+                            `.image-mention-chip[data-token="${CSS.escape(replaceTarget.dataset.token)}"]`
+                        );
+                    }
+                }
+
+                editor.focus();
+                let range = null;
+
+                if (currentReplaceTarget) {
+                    // 替换已有chip
+                    range = document.createRange();
+                    range.selectNode(currentReplaceTarget);
+                    range.deleteContents();
+                    delete imagePromptReplaceTargets.current[nodeId];
+                } else {
+                    // 获取插入位置
+                    const mentionTrigger = imagePromptMentionTrigger.current[nodeId];
+                    const savedRange = imagePromptSelectionRanges.current[nodeId];
+                    
+                    if (mentionTrigger && mentionTrigger.container) {
+                        // 使用 @ 触发时的位置
+                        const { container, offset } = mentionTrigger;
+                        range = document.createRange();
+                        if (container.nodeType === Node.TEXT_NODE) {
+                            const text = container.textContent || '';
+                            // 查找 @ 字符位置
+                            const atPos = text.lastIndexOf('@', offset - 1);
+                            if (atPos !== -1) {
+                                // 删除 @ 字符
+                                container.textContent = text.slice(0, atPos) + text.slice(atPos + 1);
+                                range.setStart(container, atPos);
+                                range.collapse(true);
+                            } else {
+                                range.setStart(container, Math.max(0, offset - 1));
+                                range.collapse(true);
+                            }
+                        } else {
+                            range.setStart(container, Math.max(0, offset - 1));
+                            range.collapse(true);
+                        }
+                        delete imagePromptMentionTrigger.current[nodeId];
+                    } else if (savedRange && editor.contains(savedRange.startContainer)) {
+                        // 使用保存的selection位置
+                        range = savedRange.cloneRange();
+                    } else {
+                        // 默认在末尾插入
+                        range = document.createRange();
+                        range.selectNodeContents(editor);
+                        range.collapse(false);
+                    }
+                }
+
+                // 插入chip
+                range.insertNode(chip);
+                const spacer = document.createTextNode('\u00A0');
+                chip.parentNode.insertBefore(spacer, chip.nextSibling);
+                range.setStart(spacer, 1);
+                range.setEnd(spacer, 1);
+                selection.removeAllRanges();
+                selection.addRange(range);
+                imagePromptSelectionRanges.current[nodeId] = range.cloneRange();
+
+                syncImagePromptFromEditor(nodeId);
+                closeImageMentionPopup(nodeId);
+
+                requestAnimationFrame(() => {
+                    const latestEditor = imagePromptTextareaRefs.current[nodeId];
+                    if (!latestEditor) return;
+                    latestEditor.focus();
+                });
+            }, [getConnectedReferenceAssets, createImageMentionChipElement, syncImagePromptFromEditor, closeImageMentionPopup]);
+
             const saveVideoPromptSelection = useCallback((nodeId) => {
                 const editor = videoPromptTextareaRefs.current[nodeId];
                 const selection = window.getSelection();
@@ -3447,22 +3677,29 @@ You must design a visual composition that tells the story through **8 distinct p
                 }));
             }, []);
 
-            const openVideoMentionPopup = useCallback((nodeId) => {
+            const openVideoMentionPopup = useCallback((nodeId, options = {}) => {
+                if (!options?.keepReplaceTarget) {
+                    delete videoPromptReplaceTargets.current[nodeId];
+                }
                 setVideoMentionSelectedIndex(0);
                 setActiveDropdown({ nodeId, type: 'videoMention' });
                 requestAnimationFrame(() => updateVideoMentionPopupPosition(nodeId));
             }, [updateVideoMentionPopupPosition]);
 
-            const closeVideoMentionPopup = useCallback((nodeId = null) => {
+            const closeVideoMentionPopup = useCallback((nodeId = null, options = {}) => {
+                const preserveReplaceTarget = options?.preserveReplaceTarget === true;
                 setActiveDropdown((prev) => {
                     if (!prev || prev.type !== 'videoMention') return prev;
                     if (nodeId && prev.nodeId !== nodeId) return prev;
                     return null;
                 });
-                if (!nodeId || videoPromptReplaceTargets.current[nodeId]) {
+                if (!preserveReplaceTarget && (!nodeId || videoPromptReplaceTargets.current[nodeId])) {
                     if (nodeId) delete videoPromptReplaceTargets.current[nodeId];
                     else videoPromptReplaceTargets.current = {};
                 }
+                // 清理 mentionTrigger
+                if (nodeId) delete videoPromptMentionTrigger.current[nodeId];
+                else videoPromptMentionTrigger.current = {};
                 setVideoMentionPopup(prev => nodeId && prev.nodeId !== nodeId ? prev : { ...prev, visible: false, nodeId: null });
             }, []);
 
@@ -3473,54 +3710,69 @@ You must design a visual composition that tells the story through **8 distinct p
 
                 const selection = window.getSelection();
                 const chip = createVideoMentionChipElement(asset);
-                let range = videoPromptSelectionRanges.current[nodeId]?.cloneRange() || null;
+                
+                // 优先处理替换目标（点击已有chip进行替换）
                 const replaceTarget = videoPromptReplaceTargets.current[nodeId];
-
-                const removeTypedMentionTrigger = (targetRange) => {
-                    if (!targetRange) return;
-                    if (targetRange.startContainer.nodeType === Node.TEXT_NODE) {
-                        const textNode = targetRange.startContainer;
-                        const offset = targetRange.startOffset;
-                        const text = textNode.textContent || '';
-                        const atPos = text.lastIndexOf('@', Math.max(0, offset - 1));
-                        if (atPos !== -1 && atPos < offset) {
-                            textNode.textContent = `${text.slice(0, atPos)}${text.slice(offset)}`;
-                            targetRange.setStart(textNode, atPos);
-                            targetRange.collapse(true);
-                            return;
-                        }
+                let currentReplaceTarget = null;
+                if (replaceTarget) {
+                    if (editor.contains(replaceTarget)) {
+                        currentReplaceTarget = replaceTarget;
+                    } else if (replaceTarget.dataset?.token) {
+                        // 尝试通过token重新查找
+                        currentReplaceTarget = editor.querySelector(
+                            `.video-mention-chip[data-token="${CSS.escape(replaceTarget.dataset.token)}"]`
+                        );
                     }
-
-                    let anchorNode = targetRange.startContainer;
-                    let anchorOffset = targetRange.startOffset;
-                    if (anchorNode.nodeType === Node.ELEMENT_NODE && anchorOffset > 0) {
-                        const prevNode = anchorNode.childNodes[anchorOffset - 1];
-                        if (prevNode?.nodeType === Node.TEXT_NODE) {
-                            const prevText = prevNode.textContent || '';
-                            if (prevText.endsWith('@')) {
-                                prevNode.textContent = prevText.slice(0, -1);
-                                targetRange.setStart(prevNode, prevNode.textContent.length);
-                                targetRange.collapse(true);
-                            }
-                        }
-                    }
-                };
-
-                editor.focus();
-
-                if (replaceTarget && editor.contains(replaceTarget)) {
-                    range = document.createRange();
-                    range.selectNode(replaceTarget);
-                    range.deleteContents();
-                    delete videoPromptReplaceTargets.current[nodeId];
-                } else if (!range || !editor.contains(range.startContainer)) {
-                    range = document.createRange();
-                    range.selectNodeContents(editor);
-                    range.collapse(false);
                 }
 
-                removeTypedMentionTrigger(range);
+                editor.focus();
+                let range = null;
 
+                if (currentReplaceTarget) {
+                    // 替换已有chip
+                    range = document.createRange();
+                    range.selectNode(currentReplaceTarget);
+                    range.deleteContents();
+                    delete videoPromptReplaceTargets.current[nodeId];
+                } else {
+                    // 获取插入位置
+                    const mentionTrigger = videoPromptMentionTrigger.current[nodeId];
+                    const savedRange = videoPromptSelectionRanges.current[nodeId];
+                    
+                    if (mentionTrigger && mentionTrigger.container) {
+                        // 使用 @ 触发时的位置
+                        const { container, offset } = mentionTrigger;
+                        range = document.createRange();
+                        if (container.nodeType === Node.TEXT_NODE) {
+                            const text = container.textContent || '';
+                            // 查找 @ 字符位置
+                            const atPos = text.lastIndexOf('@', offset - 1);
+                            if (atPos !== -1) {
+                                // 删除 @ 字符
+                                container.textContent = text.slice(0, atPos) + text.slice(atPos + 1);
+                                range.setStart(container, atPos);
+                                range.collapse(true);
+                            } else {
+                                range.setStart(container, Math.max(0, offset - 1));
+                                range.collapse(true);
+                            }
+                        } else {
+                            range.setStart(container, Math.max(0, offset - 1));
+                            range.collapse(true);
+                        }
+                        delete videoPromptMentionTrigger.current[nodeId];
+                    } else if (savedRange && editor.contains(savedRange.startContainer)) {
+                        // 使用保存的selection位置
+                        range = savedRange.cloneRange();
+                    } else {
+                        // 默认在末尾插入
+                        range = document.createRange();
+                        range.selectNodeContents(editor);
+                        range.collapse(false);
+                    }
+                }
+
+                // 插入chip
                 range.insertNode(chip);
                 const spacer = document.createTextNode('\u00A0');
                 chip.parentNode.insertBefore(spacer, chip.nextSibling);
@@ -3596,7 +3848,7 @@ You must design a visual composition that tells the story through **8 distinct p
                 // 使用 setTimeout 确保在下一个事件循环中执行，此时 nodes 和 connections 已更新
                 setTimeout(() => {
                     const sourceNode = nodesMap.get(sourceNodeId);
-                    if (sourceNode && (sourceNode.type === 'gen-image' || sourceNode.type === 'gen-video')) {
+                    if (sourceNode && (sourceNode.type === 'gen-image' || sourceNode.type === 'rh-image' || sourceNode.type === 'gen-video')) {
                         // 查找连接到该生成节点的分镜表节点
                         const storyboardConnections = connections.filter(c => c.to === sourceNodeId);
                         for (const conn of storyboardConnections) {
@@ -3697,15 +3949,18 @@ You must design a visual composition that tells the story through **8 distinct p
                 }
 
                 try {
-                    const isJimengConfig = id.includes('jimeng') || config?.provider?.includes('Jimeng');
+                    const isSeedreamConfig = id.includes('seedream');
                     const isSeedanceConfig = id.includes('seedance');
-                    const testUrl = isJimengConfig
-                        ? `${config?.url || JIMENG_API_BASE_URL}/health`
+                    const isRunningHubConfig = id.includes('rh-image');
+                    const testUrl = isSeedreamConfig
+                        ? `${config?.url || ARK_MEDIA_API_BASE_URL}/images/generations`
                         : isSeedanceConfig
-                            ? `${config?.url || SEEDANCE_API_BASE_URL}/contents/generations/tasks`
-                            : `${config?.url || DEFAULT_BASE_URL}/v1/models`;
+                            ? `${config?.url || ARK_MEDIA_API_BASE_URL}/contents/generations/tasks`
+                            : isRunningHubConfig
+                                ? `${config?.url || RUNNINGHUB_API_BASE_URL}/query`
+                                : `${config?.url || DEFAULT_BASE_URL}/v1/models`;
                     const response = await fetch(testUrl, {
-                        method: isSeedanceConfig ? 'OPTIONS' : 'GET',
+                        method: (isSeedanceConfig || isRunningHubConfig) ? 'OPTIONS' : 'GET',
                         headers: { Authorization: `Bearer ${apiKey}` },
                     });
                     if (response.ok) setApiStatus((prev) => ({ ...prev, [id]: 'success' }));
@@ -4475,12 +4730,52 @@ You must design a visual composition that tells the story through **8 distinct p
             };
 
             const disconnectConnection = useCallback((connectionId) => {
+                // 先找到要断开的连接，确定目标节点
+                const connToRemove = connections.find(c => c.id === connectionId);
+                const targetNodeId = connToRemove?.to;
+                
                 setConnections(prev => {
                     const filtered = prev.filter(conn => conn.id !== connectionId);
-                    // 触发节点重新渲染，确保引用成功区域正确更新
                     return filtered;
                 });
-            }, []);
+                
+                // 对目标节点进行prompt规范化，移除断开连接的标签
+                if (targetNodeId) {
+                    requestAnimationFrame(() => {
+                        const targetNode = nodes.find(n => n.id === targetNodeId);
+                        if (targetNode) {
+                            if (targetNode.type === 'gen-video' && targetNode.settings?.videoPromptHtml) {
+                                const assets = getConnectedReferenceAssets(targetNodeId);
+                                const result = normalizeVideoPromptState(
+                                    targetNode.settings.videoPromptHtml,
+                                    targetNode.settings.videoPrompt,
+                                    assets
+                                );
+                                if (result.html !== targetNode.settings.videoPromptHtml) {
+                                    updateNodeSettings(targetNodeId, {
+                                        videoPrompt: result.text,
+                                        videoPromptHtml: result.html
+                                    });
+                                }
+                            } else if ((targetNode.type === 'gen-image' || targetNode.type === 'rh-image') && targetNode.settings?.promptHtml) {
+                                const assets = getConnectedReferenceAssets(targetNodeId)
+                                    .filter(a => a.type === 'image');
+                                const result = normalizeImagePromptState(
+                                    targetNode.settings.promptHtml,
+                                    targetNode.settings.prompt,
+                                    assets
+                                );
+                                if (result.html !== targetNode.settings.promptHtml) {
+                                    updateNodeSettings(targetNodeId, {
+                                        prompt: result.text,
+                                        promptHtml: result.html
+                                    });
+                                }
+                            }
+                        }
+                    });
+                }
+            }, [connections, nodes, getConnectedReferenceAssets, normalizeVideoPromptState, normalizeImagePromptState, updateNodeSettings]);
 
             const handleDrop = (nodeId, e) => {
                 e.preventDefault(); e.stopPropagation();
@@ -5222,6 +5517,100 @@ You must design a visual composition that tells the story through **8 distinct p
                     } else {
                         setHistory(prev => prev.map(hItem => hItem.id === taskId ? { ...hItem, status: 'failed', errorMsg: `轮询失败: ${err.message || '网络错误'}` } : hItem));
                     }
+                });
+            };
+
+            const pollRhImageTask = (taskId, remoteTaskId, baseUrl, apiKey, w, h, sourceNodeId, attempt = 0) => {
+                const maxAttempts = 180;
+                const delayMs = 5000;
+
+                if (attempt > maxAttempts) {
+                    setHistory((prev) => prev.map((hItem) =>
+                        hItem.id === taskId
+                            ? { ...hItem, status: 'failed', errorMsg: 'RH 图像生成轮询超时（已等待15分钟）' }
+                            : hItem
+                    ));
+                    return;
+                }
+
+                const cleanBaseUrl = baseUrl.replace(/\/+$/, '');
+                fetch(`${cleanBaseUrl}/query`, {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${apiKey}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ taskId: remoteTaskId })
+                })
+                .then((resp) => resp.text())
+                .then((text) => {
+                    let data;
+                    try {
+                        data = JSON.parse(text);
+                    } catch (err) {
+                        setTimeout(() => pollRhImageTask(taskId, remoteTaskId, baseUrl, apiKey, w, h, sourceNodeId, attempt + 1), delayMs);
+                        return;
+                    }
+
+                    const status = (data?.status || '').toUpperCase();
+                    if (status === 'SUCCESS') {
+                        const imageUrls = (data?.results || []).map(item => item?.url).filter(Boolean);
+                        if (imageUrls.length === 0) throw new Error('RH 返回成功但没有图片结果');
+
+                        const primaryUrl = imageUrls[0];
+                        const endTime = Date.now();
+                        setHistory((prev) => prev.map((hItem) => {
+                            if (hItem.id !== taskId) return hItem;
+                            const durationMs = endTime - (hItem.startTime || endTime);
+                            if (sourceNodeId) {
+                                setTimeout(() => {
+                                    updatePreviewFromTask(taskId, primaryUrl, 'image', sourceNodeId, imageUrls.length > 1 ? imageUrls : null);
+                                }, 0);
+                            }
+                            return {
+                                ...hItem,
+                                status: 'completed',
+                                progress: 100,
+                                url: primaryUrl,
+                                width: w,
+                                height: h,
+                                durationMs,
+                                mjImages: imageUrls.length > 1 ? imageUrls : null,
+                                selectedMjImageIndex: 0,
+                                errorMsg: null
+                            };
+                        }));
+                        return;
+                    }
+
+                    if (status === 'FAILED' || status === 'ERROR' || status === 'CANCELLED') {
+                        const errorMsg = data?.errorMessage || data?.failedReason?.message || 'RH 图像生成失败';
+                        setHistory((prev) => prev.map((hItem) =>
+                            hItem.id === taskId
+                                ? { ...hItem, status: 'failed', errorMsg }
+                                : hItem
+                        ));
+                        return;
+                    }
+
+                    setHistory((prev) => prev.map((hItem) =>
+                        hItem.id === taskId
+                            ? { ...hItem, status: 'generating', progress: Math.min(95, Math.max(hItem.progress || 10, 10) + 2) }
+                            : hItem
+                    ));
+                    setTimeout(() => pollRhImageTask(taskId, remoteTaskId, baseUrl, apiKey, w, h, sourceNodeId, attempt + 1), delayMs);
+                })
+                .catch((err) => {
+                    console.error('[RH Image] Poll Error:', err);
+                    if (attempt >= 3) {
+                        setHistory((prev) => prev.map((hItem) =>
+                            hItem.id === taskId
+                                ? { ...hItem, status: 'failed', errorMsg: `RH 轮询失败: ${err.message}` }
+                                : hItem
+                        ));
+                        return;
+                    }
+                    setTimeout(() => pollRhImageTask(taskId, remoteTaskId, baseUrl, apiKey, w, h, sourceNodeId, attempt + 1), delayMs);
                 });
             };
 
@@ -6188,11 +6577,6 @@ You must design a visual composition that tells the story through **8 distinct p
 
                     // 获取正确的模型显示名称（用于历史记录）
                     const getModelDisplayName = () => {
-                        // 如果是jimeng模型，根据modelId确定正确的provider名称
-                        if (modelId.includes('jimeng-4.5')) return 'Jimeng 4.5';
-                        if (modelId.includes('jimeng-4.1')) return 'Jimeng 4.1';
-                        if (modelId.includes('jimeng-3.1')) return 'Jimeng 3.1';
-                        // 其他模型使用config中的provider，如果没有则使用modelId
                         return config?.provider || modelId;
                     };
                 
@@ -6245,18 +6629,8 @@ You must design a visual composition that tells the story through **8 distinct p
                         // isNanoBanana2: V2.5-4 新增的异步模型标识
                         const isNanoBanana2 = (config?.modelName ?? '').includes('nano-banana-2') || modelId.includes('nano-banana-2');
                         const isMidjourney = modelId.includes('mj') || (config?.provider ?? '').toLowerCase().includes('midjourney');
-                        const isJimeng = modelId.includes('jimeng-4.5') || modelId.includes('jimeng-4.1') || modelId.includes('jimeng-3.1') || (config?.modelName ?? '').includes('jimeng-4.5') || (config?.modelName ?? '').includes('jimeng-4.1') || (config?.modelName ?? '').includes('jimeng-3.1');
-
-                        // 辅助函数
-                        const getJimengModelName = () => {
-                            if (modelId.includes('jimeng-4.5')) return 'jimeng-4.5';
-                            if (modelId.includes('jimeng-4.1')) return 'jimeng-4.1';
-                            if (modelId.includes('jimeng-3.1')) return 'jimeng-3.1';
-                            if (config?.modelName && (config.modelName.includes('jimeng-4.5') || config.modelName.includes('jimeng-4.1') || config.modelName.includes('jimeng-3.1'))) {
-                                return config.modelName;
-                            }
-                            return 'jimeng-4.5';
-                        };
+                        const isSeedream = modelId.includes('seedream') || (config?.modelName ?? '').includes('seedream');
+                        const isRhImage = modelId.includes('rh-image') || (config?.modelName ?? '').includes('rhart-image');
 
                         const getImageSizeFlag = () => {
                             if (!isNanoBanana2) return undefined;
@@ -6463,81 +6837,76 @@ You must design a visual composition that tells the story through **8 distinct p
                              pollMidjourneyJob(remoteTaskId, taskId, baseUrl, apiKey, mjMode, w, h);
                              return;
                         }
-                        // 6. 即梦 (Jimeng) - [修复] 恢复 V2.5-3 的稳定逻辑
-                        else if (isJimeng) {
-                            if (connectedImages.length > 0) {
-                                // 图生图 (使用 compositions)
-                                endpoint = `${baseUrl}/v1/images/compositions`;
-                                if (!prompt || prompt.trim() === '') throw new Error('图生图功能需要提供提示词');
-                                
-                                let jimengRatio = ratio;
-                                let jimengResolution = '2k';
-                                
-                                if (ratio === 'Auto' && sourceImage) {
-                                    try {
-                                        const sourceDims = await getImageDimensions(sourceImage);
-                                        const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
-                                        const divisor = gcd(sourceDims.w, sourceDims.h);
-                                        jimengRatio = `${sourceDims.w / divisor}:${sourceDims.h / divisor}`;
-                                        
-                                        if (resolution === 'Auto') {
-                                            const maxSide = Math.max(sourceDims.w, sourceDims.h);
-                                            jimengResolution = maxSide <= 1024 ? '1k' : (maxSide <= 2048 ? '2k' : '4k');
-                                        }
-                                    } catch (e) { jimengRatio = '1:1'; }
-                                } else {
-                                    jimengRatio = ratio === 'Auto' ? '1:1' : ratio;
-                                }
-                                
-                                if (resolution !== 'Auto') {
-                                    jimengResolution = resolution === '1K' ? '1k' : (resolution === '2K' ? '2k' : '4k');
-                                }
+                        // 6. Seedream
+                        else if (isSeedream) {
+                            if (!prompt || prompt.trim() === '') throw new Error('提示词不能为空');
+                            endpoint = `${baseUrl}/images/generations`;
 
-                                const imagePromises = connectedImages.map(async (imgUrl) => {
-                                    if (imgUrl.startsWith('http')) {
-                                        const response = await fetch(imgUrl);
-                                        const blob = await response.blob();
-                                        return await new Promise((resolve) => {
-                                            const reader = new FileReader();
-                                            reader.onloadend = () => resolve(reader.result);
-                                            reader.readAsDataURL(blob);
-                                        });
-                                    }
+                            const normalizeSeedreamInput = async (imgUrl) => {
+                                if (imgUrl.startsWith('http://') || imgUrl.startsWith('https://') || imgUrl.startsWith('data:')) {
                                     return imgUrl;
-                                });
-                                const base64Images = await Promise.all(imagePromises);
-                                const jimengModelName = getJimengModelName();
-                                
-                                payload = {
-                                    model: jimengModelName,
-                                    prompt: prompt.trim(),
-                                    images: base64Images,
-                                    ratio: jimengRatio,
-                                    resolution: jimengResolution,
-                                    response_format: 'url'
-                                };
-                            } else {
-                                // 文生图 (使用 generations)
-                                endpoint = `${baseUrl}/v1/images/generations`;
-                                const jimengRatio = ratio === 'Auto' ? '1:1' : ratio;
-                                let jimengResolution = '2k';
-                                if (resolution === '1K') jimengResolution = '1k';
-                                else if (resolution === '2K') jimengResolution = '2k';
-                                else if (resolution === '4K') jimengResolution = '4k';
-                                
-                                if (!prompt || prompt.trim() === '') throw new Error('提示词不能为空');
-                                
-                                const jimengModelName = getJimengModelName();
-                                payload = {
-                                    model: jimengModelName,
-                                    prompt: prompt.trim(),
-                                    ratio: jimengRatio,
-                                    resolution: jimengResolution,
-                                    response_format: 'url'
-                                };
+                                }
+                                const b64 = await getBase64FromUrl(imgUrl);
+                                return `data:image/png;base64,${b64}`;
+                            };
+
+                            const requestedResolution = resolution === 'Auto'
+                                ? (modelId.includes('seedream-5.0') ? '2K' : '2K')
+                                : resolution;
+                            const seedreamSize = requestedResolution;
+                            const imageInputs = await Promise.all(connectedImages.map(normalizeSeedreamInput));
+
+                            payload = {
+                                model: config?.modelName || modelId,
+                                prompt: prompt.trim(),
+                                size: seedreamSize,
+                                response_format: 'url',
+                                stream: false,
+                                watermark: false
+                            };
+
+                            if (modelId.includes('seedream-5.0')) {
+                                payload.output_format = 'png';
                             }
-                        } 
-                        // 7. [修复] 通用兜底 (修复 Banana T2I 问题)
+
+                            if (imageInputs.length === 1) {
+                                payload.image = imageInputs[0];
+                            } else if (imageInputs.length > 1) {
+                                payload.image = imageInputs;
+                                payload.sequential_image_generation = 'disabled';
+                            }
+                        }
+                        // 7. RH 全能图
+                        else if (isRhImage) {
+                            if (!prompt || prompt.trim() === '') throw new Error('提示词不能为空');
+
+                            const normalizeRhInput = async (imgUrl) => {
+                                if (imgUrl.startsWith('http://') || imgUrl.startsWith('https://') || imgUrl.startsWith('data:')) {
+                                    return imgUrl;
+                                }
+                                const b64 = await getBase64FromUrl(imgUrl);
+                                return `data:image/png;base64,${b64}`;
+                            };
+
+                            const rhImages = await Promise.all(connectedImages.map(normalizeRhInput));
+                            const rhResolution = String((resolution && resolution !== 'Auto' ? resolution : '2K')).toLowerCase();
+                            const rhAspectRatio = ratio === 'Auto' ? '1:1' : ratio;
+                            const rhModelPath = modelId.includes('rh-image-pro') ? 'rhart-image-n-pro' : 'rhart-image-n-g31-flash';
+                            const rhAction = rhImages.length > 0
+                                ? (modelId.includes('rh-image-pro') ? 'edit' : 'image-to-image')
+                                : 'text-to-image';
+
+                            endpoint = `${baseUrl}/${rhModelPath}/${rhAction}`;
+                            payload = {
+                                prompt: prompt.trim(),
+                                aspectRatio: rhAspectRatio,
+                                resolution: rhResolution
+                            };
+                            if (rhImages.length > 0) {
+                                payload.imageUrls = rhImages;
+                            }
+                        }
+                        // 8. [修复] 通用兜底 (修复 Banana T2I 问题)
                         // 这部分是 V2.5-4 缺失的，导致普通 Banana 模型和其他通用 OpenAI 格式模型无法进行文生图
                         else {
                             payload = { 
@@ -6595,9 +6964,12 @@ You must design a visual composition that tells the story through **8 distinct p
                             throw new Error(errorMsg);
                         }
 
-                        // 处理即梦特定错误码
-                        if (isJimeng && data?.code !== undefined && data.code !== 0 && data.code !== 1 && data.code !== 200) {
-                            throw new Error(data.message || `即梦API错误: ${data.code}`);
+                        if (isRhImage && data?.status && data.taskId) {
+                            setHistory((prev) => prev.map((hItem) =>
+                                hItem.id === taskId ? { ...hItem, status: 'generating', progress: 10, remoteTaskId: data.taskId } : hItem
+                            ));
+                            pollRhImageTask(taskId, data.taskId, baseUrl, apiKey, w, h, actualSourceNodeId);
+                            return;
                         }
 
                         // [保留 V2.5-4 特性] 处理异步任务 (Nano Banana 2)
@@ -7827,7 +8199,7 @@ You must design a visual composition that tells the story through **8 distinct p
             const addNode = (type, worldX, worldY, sourceId, initialContent = undefined, initialDimensions = undefined, targetId = undefined, inputType = undefined) => {
                 const defaultSize = type === 'gen-video'
                     ? { w: 380, h: 420 }
-                    : type === 'gen-image'
+                    : (type === 'gen-image' || type === 'rh-image')
                         ? { w: 360, h: 340 }
                         : type === 'audio-input'
                             ? { w: 320, h: 180 }
@@ -7854,7 +8226,9 @@ You must design a visual composition that tells the story through **8 distinct p
                     content: initialContent, 
                     ...(initialDimensions ? { dimensions: initialDimensions } : {}),
                     settings: type === 'gen-image'
-                        ? { model: 'nano-banana', ratio: 'Auto', resolution: 'Auto', prompt: '' }
+                        ? { model: 'nano-banana', ratio: 'Auto', resolution: 'Auto', prompt: '', promptHtml: '' }
+                        : type === 'rh-image'
+                            ? { model: 'rh-image-v2', ratio: '1:1', resolution: '2K', prompt: '', promptHtml: '' }
                         : type === 'gen-video'
                             ? { model: 'seedance-2.0-fast', duration: '5s', ratio: '16:9', resolution: '480p', seed: -1, generateAudio: true, videoPrompt: '' }
                             : type === 'audio-input'
@@ -7901,10 +8275,54 @@ You must design a visual composition that tells the story through **8 distinct p
             };
 
             const deleteNode = useCallback((id) => {
+                // 获取被删除节点作为素材源连接到的所有目标节点
+                const affectedConnections = connections.filter(c => c.from === id);
+                const affectedTargetIds = affectedConnections.map(c => c.to);
+                
                 setNodes((prev) => prev.filter((n) => n.id !== id));
                 setConnections((prev) => prev.filter((c) => c.from !== id && c.to !== id));
                 if (selectedNodeId === id) setSelectedNodeId(null);
-            }, [selectedNodeId]);
+                
+                // 触发受影响节点的prompt规范化，移除断开连接的标签
+                if (affectedTargetIds.length > 0) {
+                    requestAnimationFrame(() => {
+                        affectedTargetIds.forEach(targetNodeId => {
+                            const targetNode = nodes.find(n => n.id === targetNodeId);
+                            if (targetNode) {
+                                if (targetNode.type === 'gen-video' && targetNode.settings?.videoPromptHtml) {
+                                    // 获取断开连接后的新assets（排除了被删除的节点）
+                                    const newAssets = getConnectedReferenceAssets(targetNodeId);
+                                    const result = normalizeVideoPromptState(
+                                        targetNode.settings.videoPromptHtml,
+                                        targetNode.settings.videoPrompt,
+                                        newAssets
+                                    );
+                                    if (result.html !== targetNode.settings.videoPromptHtml) {
+                                        updateNodeSettings(targetNodeId, {
+                                            videoPrompt: result.text,
+                                            videoPromptHtml: result.html
+                                        });
+                                    }
+                                } else if ((targetNode.type === 'gen-image' || targetNode.type === 'rh-image') && targetNode.settings?.promptHtml) {
+                                    const newAssets = getConnectedReferenceAssets(targetNodeId)
+                                        .filter(a => a.type === 'image');
+                                    const result = normalizeImagePromptState(
+                                        targetNode.settings.promptHtml,
+                                        targetNode.settings.prompt,
+                                        newAssets
+                                    );
+                                    if (result.html !== targetNode.settings.promptHtml) {
+                                        updateNodeSettings(targetNodeId, {
+                                            prompt: result.text,
+                                            promptHtml: result.html
+                                        });
+                                    }
+                                }
+                            }
+                        });
+                    });
+                }
+            }, [selectedNodeId, connections, nodes, getConnectedReferenceAssets, normalizeVideoPromptState, normalizeImagePromptState, updateNodeSettings]);
 
             const updateNodeSettings = useCallback((id, newSettings) => {
                 setNodes((prev) => prev.map((n) => n.id === id ? { ...n, settings: { ...n.settings, ...newSettings } } : n));
@@ -7916,7 +8334,7 @@ You must design a visual composition that tells the story through **8 distinct p
                 for (const conn of connections) {
                     if (conn.from === sourceNodeId) {
                         const targetNode = nodesMap.get(conn.to);
-                        if (targetNode && (targetNode.type === 'gen-image' || targetNode.type === 'gen-video')) {
+                        if (targetNode && (targetNode.type === 'gen-image' || targetNode.type === 'rh-image' || targetNode.type === 'gen-video')) {
                             genNodes.push(targetNode);
                         }
                     }
@@ -10625,8 +11043,13 @@ You must design a visual composition that tells the story through **8 distinct p
                 const isSelected = selectedNodeId === node.id || selectedNodeIds.has(node.id);
                 const connectedImages = getConnectedInputImages(node.id);
                 const referenceAssets = getConnectedReferenceAssets(node.id);
+                const imageReferenceAssets = referenceAssets.filter(asset => asset.type === 'image');
+                const isImageGenerationNode = node.type === 'gen-image' || node.type === 'rh-image';
                 const normalizedVideoPrompt = node.type === 'gen-video'
                     ? normalizeVideoPromptState(node.settings?.videoPromptHtml, node.settings?.videoPrompt || '', referenceAssets)
+                    : null;
+                const normalizedImagePrompt = isImageGenerationNode
+                    ? normalizeImagePromptState(node.settings?.promptHtml, node.settings?.prompt || '', imageReferenceAssets)
                     : null;
                 const isHoverTarget = hoverTargetId === node.id;
                 // 使用缓存的连接状态，O(1) 查找
@@ -10744,6 +11167,7 @@ You must design a visual composition that tells the story through **8 distinct p
                                      node.type === 'video-input' ? '视频' : 
                                      node.type === 'audio-input' ? '音频' :
                                      node.type === 'gen-image' ? '生成图片' : 
+                                     node.type === 'rh-image' ? 'RH 全能图片' :
                                      node.type === 'gen-video' ? '生成视频' : 
                                      node.type === 'text-node' ? '文字' : 
                                      node.type === 'preview' ? '预览' : 
@@ -12819,7 +13243,7 @@ You must design a visual composition that tells the story through **8 distinct p
                                 </div>
                             )}
 
-                            {(node.type === 'gen-image' || node.type === 'gen-video') && (() => {
+                            {(node.type === 'gen-image' || node.type === 'rh-image' || node.type === 'gen-video') && (() => {
                                 // 查找当前节点对应的正在生成的历史记录
                                 const activeTask = history.find(h => 
                                     h.sourceNodeId === node.id && 
@@ -12854,8 +13278,8 @@ You must design a visual composition that tells the story through **8 distinct p
                                             theme === 'dark' ? 'text-zinc-300' : 'text-zinc-700'
                                         }`}
                                     >
-                                        {node.type === 'gen-image' ? <Wand2 size={12} className="text-blue-400" /> : <Video size={12} className="text-purple-400" />}
-                                        <span>{node.type === 'gen-image' ? 'AI 绘图' : 'AI 视频'}</span>
+                                        {node.type === 'gen-video' ? <Video size={12} className="text-purple-400" /> : <Wand2 size={12} className="text-blue-400" />}
+                                        <span>{node.type === 'gen-video' ? 'AI 视频' : node.type === 'rh-image' ? 'RH 全能图片' : 'AI 绘图'}</span>
                                     </div>
                                     {((node.type === 'gen-video' ? referenceAssets.length > 0 : connectedImages.length > 0)) && (
                                         <div
@@ -12875,14 +13299,53 @@ You must design a visual composition that tells the story through **8 distinct p
                                                     {node.type === 'gen-video' ? '素材参考' : '引用成功'}
                                                 </span>
                                                 <div className="flex items-center gap-1.5">
-                                                    {node.type === 'gen-video' && (
+                                                    {(node.type === 'gen-video' || isImageGenerationNode) && (
                                                         <button
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
-                                                                openVideoMentionPopup(node.id);
-                                                                requestAnimationFrame(() => {
-                                                                    videoPromptTextareaRefs.current[node.id]?.focus();
-                                                                });
+                                                                if (node.type === 'gen-video') {
+                                                                    const editor = videoPromptTextareaRefs.current[node.id];
+                                                                    if (editor) {
+                                                                        editor.focus();
+                                                                        const selection = window.getSelection();
+                                                                        // 在光标位置插入 @ 并记录位置
+                                                                        const range = selection.rangeCount > 0 && editor.contains(selection.getRangeAt(0).startContainer)
+                                                                            ? selection.getRangeAt(0).cloneRange()
+                                                                            : (() => { const r = document.createRange(); r.selectNodeContents(editor); r.collapse(false); return r; })();
+                                                                        const atNode = document.createTextNode('@');
+                                                                        range.insertNode(atNode);
+                                                                        range.setStartAfter(atNode);
+                                                                        range.collapse(true);
+                                                                        selection.removeAllRanges();
+                                                                        selection.addRange(range);
+                                                                        videoPromptMentionTrigger.current[node.id] = {
+                                                                            container: atNode,
+                                                                            offset: 1
+                                                                        };
+                                                                    }
+                                                                    openVideoMentionPopup(node.id);
+                                                                } else {
+                                                                    const editor = imagePromptTextareaRefs.current[node.id];
+                                                                    if (editor) {
+                                                                        editor.focus();
+                                                                        const selection = window.getSelection();
+                                                                        // 在光标位置插入 @ 并记录位置
+                                                                        const range = selection.rangeCount > 0 && editor.contains(selection.getRangeAt(0).startContainer)
+                                                                            ? selection.getRangeAt(0).cloneRange()
+                                                                            : (() => { const r = document.createRange(); r.selectNodeContents(editor); r.collapse(false); return r; })();
+                                                                        const atNode = document.createTextNode('@');
+                                                                        range.insertNode(atNode);
+                                                                        range.setStartAfter(atNode);
+                                                                        range.collapse(true);
+                                                                        selection.removeAllRanges();
+                                                                        selection.addRange(range);
+                                                                        imagePromptMentionTrigger.current[node.id] = {
+                                                                            container: atNode,
+                                                                            offset: 1
+                                                                        };
+                                                                    }
+                                                                    openImageMentionPopup(node.id);
+                                                                }
                                                             }}
                                                             className={`px-2 py-0.5 rounded text-[10px] border ${
                                                                 theme === 'dark'
@@ -12901,14 +13364,14 @@ You must design a visual composition that tells the story through **8 distinct p
                                                     >
                                                         {node.type === 'gen-video'
                                                             ? `${referenceAssets.filter(a => a.type === 'image').length}/${VIDEO_REFERENCE_LIMITS.image} 图 · ${referenceAssets.filter(a => a.type === 'video').length}/${VIDEO_REFERENCE_LIMITS.video} 视 · ${referenceAssets.filter(a => a.type === 'audio').length}/${VIDEO_REFERENCE_LIMITS.audio} 音`
-                                                            : `${connectedImages.length}/10`}
+                                                            : `${imageReferenceAssets.length}/10 图`}
                                                     </span>
                                                 </div>
                                              </div>
                                              <div className={`overflow-visible pb-1 items-center custom-scrollbar pl-1 ${
                                                  node.type === 'gen-video' ? 'flex gap-2 flex-wrap' : 'flex -space-x-2'
                                              }`}>
-                                                {(node.type === 'gen-video' ? referenceAssets : connectedImages.map((imgSrc, idx) => ({ type: 'image', url: imgSrc, index: idx + 1, token: `@img${idx + 1}` }))).map((asset, idx) => (
+                                                {(node.type === 'gen-video' ? referenceAssets : imageReferenceAssets).map((asset, idx) => (
                                                     <div
                                                         key={`${asset.type}-${asset.index}-${idx}`}
                                                         className={`relative shrink-0 flex flex-col items-center gap-0 ${
@@ -12933,9 +13396,15 @@ You must design a visual composition that tells the story through **8 distinct p
                                                                     e.stopPropagation();
                                                                     if (node.type === 'gen-video') {
                                                                         insertVideoMentionToken(node.id, asset.token);
+                                                                    } else if (isImageGenerationNode) {
+                                                                        insertImageMentionToken(node.id, asset.token);
                                                                     }
                                                                 }}
-                                                                title={node.type === 'gen-video' ? `插入 ${asset.token}` : ''}
+                                                                onMouseDown={(e) => {
+                                                                    e.preventDefault();
+                                                                    e.stopPropagation();
+                                                                }}
+                                                                title={(node.type === 'gen-video' || isImageGenerationNode) ? `插入 ${asset.token}` : ''}
                                                             >
                                                                 {asset.type === 'image' ? (
                                                                     <img src={asset.url} className="w-full h-full object-cover" />
@@ -12946,11 +13415,16 @@ You must design a visual composition that tells the story through **8 distinct p
                                                                 )}
                                                             </div>
                                                         </div>
-                                                        {node.type === 'gen-video' && (
+                                                        {(node.type === 'gen-video' || isImageGenerationNode) && (
                                                             <button
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
-                                                                    insertVideoMentionToken(node.id, asset.token);
+                                                                    if (node.type === 'gen-video') insertVideoMentionToken(node.id, asset.token);
+                                                                    else insertImageMentionToken(node.id, asset.token);
+                                                                }}
+                                                                onMouseDown={(e) => {
+                                                                    e.preventDefault();
+                                                                    e.stopPropagation();
                                                                 }}
                                                                 className={`mt-1 px-1.5 py-0.5 rounded text-[9px] border ${
                                                                     theme === 'dark'
@@ -13025,6 +13499,7 @@ You must design a visual composition that tells the story through **8 distinct p
                                                             delete videoPromptTextareaRefs.current[node.id];
                                                             delete videoPromptSelectionRanges.current[node.id];
                                                             delete videoPromptReplaceTargets.current[node.id];
+                                                            delete videoPromptMentionTrigger.current[node.id];
                                                         }
                                                     }}
                                                     contentEditable
@@ -13062,25 +13537,34 @@ You must design a visual composition that tells the story through **8 distinct p
                                                             }
                                                         }
                                                         if (e.key === '@' && referenceAssets.length > 0) {
+                                                            // 记录 @ 触发位置
+                                                            const selection = window.getSelection();
+                                                            if (selection && selection.rangeCount > 0) {
+                                                                const range = selection.getRangeAt(0);
+                                                                videoPromptMentionTrigger.current[node.id] = {
+                                                                    container: range.startContainer,
+                                                                    offset: range.startOffset
+                                                                };
+                                                            }
                                                             requestAnimationFrame(() => openVideoMentionPopup(node.id));
                                                         }
                                                     }}
                                                     onMouseDown={(e) => {
                                                         e.stopPropagation();
                                                         const chip = e.target.closest('.video-mention-chip');
-                                                        if (chip) {
-                                                            e.preventDefault();
-                                                            videoPromptReplaceTargets.current[node.id] = chip;
-                                                            openVideoMentionPopup(node.id);
-                                                        }
-                                                    }}
+                                                            if (chip) {
+                                                                e.preventDefault();
+                                                                videoPromptReplaceTargets.current[node.id] = chip;
+                                                                openVideoMentionPopup(node.id, { keepReplaceTarget: true });
+                                                            }
+                                                        }}
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         saveVideoPromptSelection(node.id);
                                                         const chip = e.target.closest('.video-mention-chip');
                                                         if (chip) {
                                                             videoPromptReplaceTargets.current[node.id] = chip;
-                                                            openVideoMentionPopup(node.id);
+                                                            openVideoMentionPopup(node.id, { keepReplaceTarget: true });
                                                         }
                                                     }}
                                                     onKeyUp={() => saveVideoPromptSelection(node.id)}
@@ -13088,7 +13572,104 @@ You must design a visual composition that tells the story through **8 distinct p
                                                     onFocus={() => saveVideoPromptSelection(node.id)}
                                                     onBlur={() => {
                                                         syncVideoPromptFromEditor(node.id);
-                                                        setTimeout(() => closeVideoMentionPopup(node.id), 120);
+                                                        setTimeout(() => closeVideoMentionPopup(node.id, { preserveReplaceTarget: true }), 120);
+                                                    }}
+                                                />
+                                            </div>
+                                        ) : isImageGenerationNode ? (
+                                            <div className="relative flex-1 h-full min-h-0">
+                                                {!normalizedImagePrompt?.text && (
+                                                    <div className={`absolute inset-0 text-xs pointer-events-none ${
+                                                        theme === 'dark' ? 'text-zinc-600' : 'text-zinc-400'
+                                                    }`}>
+                                                        描述你想要生成的画面内容，输入 @ 引用素材...
+                                                    </div>
+                                                )}
+                                                <div
+                                                    ref={(el) => {
+                                                        if (el) {
+                                                            imagePromptTextareaRefs.current[node.id] = el;
+                                                            if (el.innerHTML !== (normalizedImagePrompt?.html || '')) {
+                                                                el.innerHTML = normalizedImagePrompt?.html || '';
+                                                            }
+                                                        } else {
+                                                            delete imagePromptTextareaRefs.current[node.id];
+                                                            delete imagePromptSelectionRanges.current[node.id];
+                                                            delete imagePromptReplaceTargets.current[node.id];
+                                                            delete imagePromptMentionTrigger.current[node.id];
+                                                        }
+                                                    }}
+                                                    contentEditable
+                                                    suppressContentEditableWarning
+                                                    className={`relative z-10 flex-1 h-full min-h-full bg-transparent text-xs outline-none custom-scrollbar overflow-y-auto whitespace-pre-wrap break-words ${
+                                                        theme === 'dark' ? 'text-zinc-300' : 'text-zinc-800'
+                                                    }`}
+                                                    onInput={() => {
+                                                        syncImagePromptFromEditor(node.id);
+                                                        saveImagePromptSelection(node.id);
+                                                    }}
+                                                    onKeyDown={(e) => {
+                                                        const isMentionOpen = activeDropdown?.nodeId === node.id && activeDropdown?.type === 'imageMention';
+                                                        if (isMentionOpen && imageReferenceAssets.length > 0) {
+                                                            if (e.key === 'ArrowDown') {
+                                                                e.preventDefault();
+                                                                setImageMentionSelectedIndex((prev) => (prev + 1) % imageReferenceAssets.length);
+                                                                return;
+                                                            }
+                                                            if (e.key === 'ArrowUp') {
+                                                                e.preventDefault();
+                                                                setImageMentionSelectedIndex((prev) => (prev - 1 + imageReferenceAssets.length) % imageReferenceAssets.length);
+                                                                return;
+                                                            }
+                                                            if (e.key === 'Enter') {
+                                                                e.preventDefault();
+                                                                const asset = imageReferenceAssets[imageMentionSelectedIndex];
+                                                                if (asset) insertImageMentionToken(node.id, asset.token);
+                                                                return;
+                                                            }
+                                                            if (e.key === 'Escape') {
+                                                                e.preventDefault();
+                                                                closeImageMentionPopup(node.id);
+                                                                return;
+                                                            }
+                                                        }
+                                                        if (e.key === '@' && imageReferenceAssets.length > 0) {
+                                                            // 记录 @ 触发位置
+                                                            const selection = window.getSelection();
+                                                            if (selection && selection.rangeCount > 0) {
+                                                                const range = selection.getRangeAt(0);
+                                                                imagePromptMentionTrigger.current[node.id] = {
+                                                                    container: range.startContainer,
+                                                                    offset: range.startOffset
+                                                                };
+                                                            }
+                                                            requestAnimationFrame(() => openImageMentionPopup(node.id));
+                                                        }
+                                                    }}
+                                                    onMouseDown={(e) => {
+                                                        e.stopPropagation();
+                                                        const chip = e.target.closest('.image-mention-chip');
+                                                        if (chip) {
+                                                            e.preventDefault();
+                                                            imagePromptReplaceTargets.current[node.id] = chip;
+                                                            openImageMentionPopup(node.id, { keepReplaceTarget: true });
+                                                        }
+                                                    }}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        saveImagePromptSelection(node.id);
+                                                        const chip = e.target.closest('.image-mention-chip');
+                                                        if (chip) {
+                                                            imagePromptReplaceTargets.current[node.id] = chip;
+                                                            openImageMentionPopup(node.id, { keepReplaceTarget: true });
+                                                        }
+                                                    }}
+                                                    onKeyUp={() => saveImagePromptSelection(node.id)}
+                                                    onMouseUp={() => saveImagePromptSelection(node.id)}
+                                                    onFocus={() => saveImagePromptSelection(node.id)}
+                                                    onBlur={() => {
+                                                        syncImagePromptFromEditor(node.id);
+                                                        setTimeout(() => closeImageMentionPopup(node.id, { preserveReplaceTarget: true }), 120);
                                                     }}
                                                 />
                                             </div>
@@ -13437,7 +14018,12 @@ You must design a visual composition that tells the story through **8 distinct p
                                                     onMouseDown={(e) => e.stopPropagation()}
                                                 >
                                                     {apiConfigs
-                                                        .filter((m) => m.type === (node.type === 'gen-image' ? 'Image' : 'Video') && !DELETED_MODEL_IDS.includes(m.id))
+                                                        .filter((m) => {
+                                                            if (DELETED_MODEL_IDS.includes(m.id)) return false;
+                                                            if (node.type === 'gen-video') return m.type === 'Video';
+                                                            if (node.type === 'rh-image') return m.id.startsWith('rh-image');
+                                                            return m.type === 'Image' && !m.id.startsWith('rh-image');
+                                                        })
                                                         .map((m) => (
                                                             <button
                                                                 key={m.id}
@@ -13449,6 +14035,9 @@ You must design a visual composition that tells the story through **8 distinct p
                                                                         nextSettings.resolution = '480p';
                                                                         nextSettings.seed = -1;
                                                                         nextSettings.generateAudio = true;
+                                                                    } else if (m.id.startsWith('rh-image')) {
+                                                                        nextSettings.ratio = '1:1';
+                                                                        nextSettings.resolution = '2K';
                                                                     }
                                                                     updateNodeSettings(node.id, nextSettings);
                                                                     setActiveDropdown(null);
@@ -13602,7 +14191,7 @@ You must design a visual composition that tells the story through **8 distinct p
                                                 </div>
                                             ) : null}
 
-                                            {node.type === 'gen-image' && (() => {
+                                            {isImageGenerationNode && (() => {
                                                 const currentModel = apiConfigsMap.get(node.settings?.model);
                                                 const isMidjourney = currentModel && (currentModel.id.includes('mj') || currentModel.provider.toLowerCase().includes('midjourney'));
                                                 return !isMidjourney;
@@ -13752,13 +14341,15 @@ You must design a visual composition that tells the story through **8 distinct p
                                             )}
                                         </div>
                                         <button onClick={() => {
-                                            const rawPrompt = node.type === 'gen-image'
-                                                ? (node.settings?.prompt || '')
+                                            const rawPrompt = (node.type === 'gen-image' || node.type === 'rh-image')
+                                                ? (serializeImagePromptNode(imagePromptTextareaRefs.current[node.id] || { childNodes: [] }, 'token') || (node.settings?.prompt || ''))
                                                 : serializeVideoPromptNode(videoPromptTextareaRefs.current[node.id] || { childNodes: [] }, 'token') || (node.settings?.videoPrompt || '');
-                                            const basePrompt = node.type === 'gen-video' ? formatVideoPromptMentions(rawPrompt) : rawPrompt;
+                                            const basePrompt = node.type === 'gen-video'
+                                                ? formatVideoPromptMentions(rawPrompt)
+                                                : (isImageGenerationNode ? formatImagePromptMentions(rawPrompt) : rawPrompt);
                                             const connectedTexts = getConnectedTextNodes(node.id);
                                             const finalPrompt = connectedTexts.length > 0 ? connectedTexts.join(' ') + (basePrompt ? ' ' + basePrompt : '') : basePrompt;
-                                            startGeneration(finalPrompt, node.type === 'gen-image' ? 'image' : 'video', connectedImages, node.id, node.type === 'gen-video' ? { referenceAssets } : {});
+                                            startGeneration(finalPrompt, node.type === 'gen-video' ? 'video' : 'image', connectedImages, node.id, node.type === 'gen-video' ? { referenceAssets } : {});
                                         }} className="bg-blue-600 hover:bg-blue-500 text-white p-1.5 rounded-md shadow-lg active:scale-95 transition-transform shrink-0" title="生成">
                                             <Play size={12} fill="currentColor" />
                                         </button>
@@ -13769,13 +14360,28 @@ You must design a visual composition that tells the story through **8 distinct p
                         </div>
                     </div>
                 );
-            }, [selectedNodeId, selectedNodeIds, hoverTargetId, nodeConnectedStatus, adjacentNodesCache, apiConfigsMap, getConnectedInputImages, getConnectedReferenceAssets, theme, view, dragNodeId, connectingSource, connectingTarget, connectingInputType, deleteNode, handleNodeMouseUp, screenToWorld, setDragNodeId, setSelectedNodeId, setSelectedNodeIds, setActiveDropdown, setHoverTargetId, setConnectingSource, setConnectingTarget, setConnectingInputType, setResizingNodeId, setLightboxItem, isVideoUrl, updateNodeSettings, getConnectedTextNodes, startGeneration, getDefaultDurationForModel, getDefaultDurationsForModel, getConnectedGenNodes, getConnectedVideoInputNode, getConnectedVideoAnalyzeNode, activeDropdown, videoMentionSelectedIndex, openVideoMentionPopup, closeVideoMentionPopup, insertVideoMentionToken, formatVideoPromptMentions, normalizeVideoPromptState, syncVideoPromptFromEditor, saveVideoPromptSelection, serializeVideoPromptNode]);
+            }, [selectedNodeId, selectedNodeIds, hoverTargetId, nodeConnectedStatus, adjacentNodesCache, apiConfigsMap, getConnectedInputImages, getConnectedReferenceAssets, theme, view, dragNodeId, connectingSource, connectingTarget, connectingInputType, deleteNode, handleNodeMouseUp, screenToWorld, setDragNodeId, setSelectedNodeId, setSelectedNodeIds, setActiveDropdown, setHoverTargetId, setConnectingSource, setConnectingTarget, setConnectingInputType, setResizingNodeId, setLightboxItem, isVideoUrl, updateNodeSettings, getConnectedTextNodes, startGeneration, getDefaultDurationForModel, getDefaultDurationsForModel, getConnectedGenNodes, getConnectedVideoInputNode, getConnectedVideoAnalyzeNode, activeDropdown, videoMentionSelectedIndex, imageMentionSelectedIndex, openVideoMentionPopup, closeVideoMentionPopup, insertVideoMentionToken, openImageMentionPopup, closeImageMentionPopup, insertImageMentionToken, formatVideoPromptMentions, formatImagePromptMentions, normalizeVideoPromptState, normalizeImagePromptState, syncVideoPromptFromEditor, syncImagePromptFromEditor, saveVideoPromptSelection, saveImagePromptSelection, serializeVideoPromptNode, serializeImagePromptNode]);
 
             // 高性能模式：当节点数量超过 50 时自动启用
             const isPerfMode = nodes.length > 50;
             // 交互模式：正在拖拽或缩放时启用
             const isInteracting = isDragging || isPanning;
+            const currentImageMentionAssets = imageMentionPopup.nodeId
+                ? getConnectedReferenceAssets(imageMentionPopup.nodeId).filter(asset => asset.type === 'image')
+                : [];
             const currentVideoMentionAssets = videoMentionPopup.nodeId ? getConnectedReferenceAssets(videoMentionPopup.nodeId) : [];
+
+            useEffect(() => {
+                if (!imageMentionPopup.visible || !imageMentionPopup.nodeId) return;
+                const reposition = () => updateImageMentionPopupPosition(imageMentionPopup.nodeId);
+                window.addEventListener('resize', reposition);
+                window.addEventListener('scroll', reposition, true);
+                reposition();
+                return () => {
+                    window.removeEventListener('resize', reposition);
+                    window.removeEventListener('scroll', reposition, true);
+                };
+            }, [imageMentionPopup.visible, imageMentionPopup.nodeId, updateImageMentionPopupPosition, view]);
 
             useEffect(() => {
                 if (!videoMentionPopup.visible || !videoMentionPopup.nodeId) return;
@@ -13793,29 +14399,51 @@ You must design a visual composition that tells the story through **8 distinct p
                 setNodes(prev => {
                     let changed = false;
                     const next = prev.map(node => {
-                        if (node.type !== 'gen-video') return node;
-                        const assets = getConnectedReferenceAssets(node.id);
-                        const normalized = normalizeVideoPromptState(
-                            node.settings?.videoPromptHtml,
-                            node.settings?.videoPrompt || '',
-                            assets
-                        );
-                        if (normalized.html === (node.settings?.videoPromptHtml || '') && normalized.text === (node.settings?.videoPrompt || '')) {
-                            return node;
-                        }
-                        changed = true;
-                        return {
-                            ...node,
-                            settings: {
-                                ...node.settings,
-                                videoPrompt: normalized.text,
-                                videoPromptHtml: normalized.html
+                        if (node.type === 'gen-video') {
+                            const assets = getConnectedReferenceAssets(node.id);
+                            const normalized = normalizeVideoPromptState(
+                                node.settings?.videoPromptHtml,
+                                node.settings?.videoPrompt || '',
+                                assets
+                            );
+                            if (normalized.html === (node.settings?.videoPromptHtml || '') && normalized.text === (node.settings?.videoPrompt || '')) {
+                                return node;
                             }
-                        };
+                            changed = true;
+                            return {
+                                ...node,
+                                settings: {
+                                    ...node.settings,
+                                    videoPrompt: normalized.text,
+                                    videoPromptHtml: normalized.html
+                                }
+                            };
+                        }
+                        if (node.type === 'gen-image' || node.type === 'rh-image') {
+                            const assets = getConnectedReferenceAssets(node.id).filter(asset => asset.type === 'image');
+                            const normalized = normalizeImagePromptState(
+                                node.settings?.promptHtml,
+                                node.settings?.prompt || '',
+                                assets
+                            );
+                            if (normalized.html === (node.settings?.promptHtml || '') && normalized.text === (node.settings?.prompt || '')) {
+                                return node;
+                            }
+                            changed = true;
+                            return {
+                                ...node,
+                                settings: {
+                                    ...node.settings,
+                                    prompt: normalized.text,
+                                    promptHtml: normalized.html
+                                }
+                            };
+                        }
+                        return node;
                     });
                     return changed ? next : prev;
                 });
-            }, [getConnectedReferenceAssets, normalizeVideoPromptState, setNodes]);
+            }, [getConnectedReferenceAssets, normalizeVideoPromptState, normalizeImagePromptState, setNodes]);
             
             return (
                 <>
@@ -15021,6 +15649,7 @@ You must design a visual composition that tells the story through **8 distinct p
                                             { type: 'video-analyze', label: '视频拆解 / 提示词反推' },
                                             { type: 'storyboard-node', label: '智能分镜表' },
                                             { type: 'gen-image', label: 'AI 绘图' },
+                                            { type: 'rh-image', label: 'RH 全能图片' },
                                             { type: 'gen-video', label: 'AI 视频' },
                                             { type: 'image-compare', label: '图像对比' },
                                             { type: 'preview', label: '预览窗口' },
@@ -15041,6 +15670,50 @@ You must design a visual composition that tells the story through **8 distinct p
                                 </div>
                             )}
 
+                            {imageMentionPopup.visible && currentImageMentionAssets.length > 0 && (
+                                <div
+                                    className={`fixed rounded-lg shadow-2xl border z-[120] max-h-56 overflow-y-auto custom-scrollbar ${
+                                        theme === 'dark' ? 'bg-[#18181b] border-zinc-700' : 'bg-white border-zinc-200'
+                                    }`}
+                                    style={{ left: imageMentionPopup.left, top: imageMentionPopup.top, width: imageMentionPopup.width }}
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                >
+                                    <div className={`px-3 py-2 text-[10px] font-semibold border-b ${
+                                        theme === 'dark' ? 'text-zinc-400 border-zinc-700' : 'text-zinc-500 border-zinc-200'
+                                    }`}>
+                                        引用素材
+                                    </div>
+                                    {currentImageMentionAssets.map((asset, idx) => (
+                                        <button
+                                            key={`${imageMentionPopup.nodeId}-${asset.type}-${asset.index}`}
+                                            onMouseDown={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                            }}
+                                            onClick={() => insertImageMentionToken(imageMentionPopup.nodeId, asset.token)}
+                                            className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${
+                                                idx === imageMentionSelectedIndex
+                                                    ? (theme === 'dark' ? 'bg-zinc-800 text-white' : 'bg-zinc-100 text-zinc-900')
+                                                    : (theme === 'dark' ? 'text-zinc-300 hover:bg-zinc-800' : 'text-zinc-700 hover:bg-zinc-50')
+                                            }`}
+                                        >
+                                            <div className="relative shrink-0">
+                                                <span className="absolute -top-1 -left-1 w-4 h-4 text-[9px] font-semibold rounded-full bg-zinc-700 text-white flex items-center justify-center border border-white/70 leading-none">
+                                                    {asset.index}
+                                                </span>
+                                                <img src={asset.url} className="w-8 h-8 rounded object-cover" />
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <div className="text-[11px] font-medium truncate">{asset.token}</div>
+                                                <div className={`text-[10px] truncate ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-500'}`}>
+                                                    图片素材
+                                                </div>
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+
                             {videoMentionPopup.visible && currentVideoMentionAssets.length > 0 && (
                                 <div
                                     className={`fixed rounded-lg shadow-2xl border z-[120] max-h-56 overflow-y-auto custom-scrollbar ${
@@ -15057,6 +15730,10 @@ You must design a visual composition that tells the story through **8 distinct p
                                     {currentVideoMentionAssets.map((asset, idx) => (
                                         <button
                                             key={`${videoMentionPopup.nodeId}-${asset.type}-${asset.index}`}
+                                            onMouseDown={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                            }}
                                             onClick={() => insertVideoMentionToken(videoMentionPopup.nodeId, asset.token)}
                                             className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${
                                                 idx === videoMentionSelectedIndex
@@ -15429,31 +16106,19 @@ You must design a visual composition that tells the story through **8 distinct p
                                         <div className="flex items-center justify-between">
                                             <div className="flex-1">
                                                 <label className={`text-[10px] font-medium uppercase tracking-wider ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-600'}`}>
-                                                    即梦图生图使用本地文件
+                                                    Ark 图像模型 Key 共享
                                                 </label>
                                                 <p className={`text-[10px] mt-0.5 ${theme === 'dark' ? 'text-zinc-600' : 'text-zinc-500'}`}>
-                                                    启用后，即梦模型的图生图功能将强制使用本地文件（FormData），URL图片会自动下载转换为本地文件
+                                                    Seedream 4.0 / 4.5 / 5.0 与 Seedance 2.0 / 2.0 Fast 共用同一套火山 Ark API Key。
                                                 </p>
                                             </div>
-                                            <label className="relative inline-flex items-center cursor-pointer ml-3">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={jimengUseLocalFile}
-                                                    onChange={(e) => {
-                                                        const newValue = e.target.checked;
-                                                        setJimengUseLocalFile(newValue);
-                                                        localStorage.setItem('tapnow_jimeng_use_local_file', String(newValue));
-                                                    }}
-                                                    className="sr-only peer"
-                                                />
-                                                <div className={`w-11 h-6 rounded-full peer peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500/50 ${
-                                                    jimengUseLocalFile
-                                                        ? 'bg-blue-600'
-                                                        : theme === 'dark'
-                                                            ? 'bg-zinc-700'
-                                                            : 'bg-zinc-300'
-                                                } peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all`}></div>
-                                            </label>
+                                            <div className={`px-2 py-1 rounded text-[10px] border ${
+                                                theme === 'dark'
+                                                    ? 'border-blue-900/60 bg-blue-950/40 text-blue-300'
+                                                    : 'border-blue-200 bg-blue-50 text-blue-700'
+                                            }`}>
+                                                自动同步
+                                            </div>
                                         </div>
                                     </div>
                                     <div
@@ -15531,7 +16196,7 @@ You must design a visual composition that tells the story through **8 distinct p
                                         </div>
                                     </div>
                                     <div className="flex justify-between items-center mb-2">
-                                        <span className={`text-xs ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>当前仅保留 Gemini、即梦、Nano Banana 与 Seedance 2.0 配置。</span>
+                                        <span className={`text-xs ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>当前保留 Gemini、Nano Banana、Seedream、RH 与 Seedance 配置。</span>
                                     </div>
                                     <div className="space-y-3 max-h-[50vh] overflow-y-auto custom-scrollbar pr-1">
                                         {apiConfigs.filter(api => !DELETED_MODEL_IDS.includes(api.id)).map((api) => (
@@ -15571,9 +16236,9 @@ You must design a visual composition that tells the story through **8 distinct p
                                                         { key: 'modelName', label: 'Model ID', type: 'text', placeholder: 'model-id' },
                                                         { 
                                                             key: 'key', 
-                                                            label: (api.id.includes('jimeng') || api.provider?.includes('Jimeng')) ? 'Session ID' : 'API Key', 
+                                                            label: (api.id.includes('seedream') || api.id.includes('seedance')) ? 'API Key（Ark 共用）' : 'API Key',
                                                             type: 'password', 
-                                                            placeholder: (api.id.includes('jimeng') || api.provider?.includes('Jimeng')) ? '粘贴Session ID...' : 'sk-...' 
+                                                            placeholder: api.id.includes('rh-image') ? '粘贴 RunningHub Key...' : 'sk-...'
                                                         },
                                                         { key: 'url', label: 'Base URL', type: 'text', placeholder: 'https://...' },
                                                     ].map((field) => (
@@ -15588,19 +16253,14 @@ You must design a visual composition that tells the story through **8 distinct p
                                                                     const newValue = e.target.value;
                                                                     updateApiConfig(api.id, { [field.key]: newValue });
                                                                     
-                                                                    // 如果是jimeng模型的Session ID字段，首次粘贴后自动保存到localStorage
-                                                                    if (field.key === 'key' && (api.id.includes('jimeng') || api.provider?.includes('Jimeng')) && newValue && newValue.trim().length > 0) {
-                                                                        const savedSessionId = localStorage.getItem('tapnow_jimeng_session_id');
-                                                                        // 如果localStorage中没有保存的Session ID，或者当前值不同，则保存
-                                                                        if (!savedSessionId || savedSessionId !== newValue.trim()) {
-                                                                            localStorage.setItem('tapnow_jimeng_session_id', newValue.trim());
-                                                                            // 同时更新所有jimeng模型的Session ID
-                                                                            setApiConfigs((prev) => prev.map((c) => 
-                                                                                (c.id.includes('jimeng') || c.provider?.includes('Jimeng')) && c.key !== newValue.trim()
-                                                                                    ? { ...c, key: newValue.trim() }
-                                                                                    : c
-                                                                            ));
-                                                                        }
+                                                                    if (field.key === 'key' && (api.id.includes('seedream') || api.id.includes('seedance')) && newValue && newValue.trim().length > 0) {
+                                                                        const trimmed = newValue.trim();
+                                                                        localStorage.setItem('tapnow_ark_media_api_key', trimmed);
+                                                                        setApiConfigs((prev) => prev.map((c) =>
+                                                                            (c.id.includes('seedream') || c.id.includes('seedance')) && c.key !== trimmed
+                                                                                ? { ...c, key: trimmed }
+                                                                                : c
+                                                                        ));
                                                                     }
                                                                 }}
                                                                 className={`col-span-3 w-full rounded px-2 py-1 text-xs outline-none focus:border-blue-600/50 border ${
