@@ -1082,7 +1082,7 @@
         const RUNNINGHUB_API_BASE_URL = 'https://www.runninghub.ai/openapi/v2';
 
         const DEFAULT_API_CONFIGS = [
-            { id: 'gemini-3-pro', provider: 'Gemini 3 Pro', modelName: 'gemini-3-pro-preview', type: 'Chat', key: '', url: DEFAULT_BASE_URL },
+            { id: 'gemini-3-pro', provider: 'Gemini 3 Pro', modelName: 'gemini-3-pro-preview', type: 'Chat', key: '', url: DEFAULT_BASE_URL, format: 'openai' },
             { id: 'seedream-5.0', provider: 'Seedream 5.0', modelName: 'doubao-seedream-5-0-260128', type: 'Image', key: '', url: ARK_MEDIA_API_BASE_URL },
             { id: 'seedream-4.5', provider: 'Seedream 4.5', modelName: 'doubao-seedream-4-5-251128', type: 'Image', key: '', url: ARK_MEDIA_API_BASE_URL },
             { id: 'seedream-4.0', provider: 'Seedream 4.0', modelName: 'doubao-seedream-4-0-250828', type: 'Image', key: '', url: ARK_MEDIA_API_BASE_URL },
@@ -1675,8 +1675,9 @@ You must design a visual composition that tells the story through **8 distinct p
             const [apiConfigs, setApiConfigs] = useState(() => {
                 const saved = localStorage.getItem('tapnow_api_configs');
                 let configs = saved ? JSON.parse(saved) : DEFAULT_API_CONFIGS;
-                configs = configs.filter(c => ALLOWED_API_CONFIG_IDS.includes(c.id));
-                
+                // 保留内置配置和自定义配置
+                configs = configs.filter(c => ALLOWED_API_CONFIG_IDS.includes(c.id) || c.isCustom);
+
                 const savedArkMediaKey = localStorage.getItem('tapnow_ark_media_api_key') || '';
                 configs = configs.map(c =>
                     (c.id.includes('seedream') || c.id.includes('seedance'))
@@ -1689,7 +1690,9 @@ You must design a visual composition that tells the story through **8 distinct p
                     return savedConfig ? { ...defaultConfig, ...savedConfig } : defaultConfig;
                 });
 
-                return mergedConfigs.filter(c => ALLOWED_API_CONFIG_IDS.includes(c.id));
+                // 追加自定义配置并确保 format 默认值为 openai
+                const customConfigs = configs.filter(c => c.isCustom && !DEFAULT_API_CONFIGS.find(d => d.id === c.id));
+                return [...mergedConfigs, ...customConfigs].map(c => ({ ...c, format: c.format || 'openai' }));
             });
             const [globalApiKey, setGlobalApiKey] = useState(() => localStorage.getItem('tapnow_global_key') || '');
             const [assetApiKey, setAssetApiKey] = useState(() => localStorage.getItem('tapnow_asset_api_ak') || '');
@@ -3787,7 +3790,7 @@ You must design a visual composition that tells the story through **8 distinct p
             };
 
             const addNewModel = () => {
-                const newConfig = { id: `custom-${Date.now()}`, provider: 'New Model', modelName: 'new-model-id', type: 'Chat', key: '', url: DEFAULT_BASE_URL, isCustom: true };
+                const newConfig = { id: `custom-${Date.now()}`, provider: 'New Model', modelName: 'new-model-id', type: 'Chat', key: '', url: DEFAULT_BASE_URL, isCustom: true, format: 'openai' };
                 setApiConfigs([...apiConfigs, newConfig]);
             };
             const updateApiConfig = (id, updates) => setApiConfigs((prev) => prev.map((c) => (c.id === id ? { ...c, ...updates } : c)));
@@ -3809,6 +3812,7 @@ You must design a visual composition that tells the story through **8 distinct p
                     const isSeedreamConfig = id.includes('seedream');
                     const isSeedanceConfig = id.includes('seedance');
                     const isRunningHubConfig = id.includes('rh-image');
+                    const isClaudeFormat = config?.format === 'claude';
                     const testUrl = isSeedreamConfig
                         ? `${config?.url || ARK_MEDIA_API_BASE_URL}/images/generations`
                         : isSeedanceConfig
@@ -3816,9 +3820,12 @@ You must design a visual composition that tells the story through **8 distinct p
                             : isRunningHubConfig
                                 ? `${config?.url || RUNNINGHUB_API_BASE_URL}/query`
                                 : `${config?.url || DEFAULT_BASE_URL}/v1/models`;
+                    const headers = isClaudeFormat
+                        ? { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' }
+                        : { Authorization: `Bearer ${apiKey}` };
                     const response = await fetch(testUrl, {
                         method: (isSeedanceConfig || isRunningHubConfig) ? 'OPTIONS' : 'GET',
-                        headers: { Authorization: `Bearer ${apiKey}` },
+                        headers,
                     });
                     if (response.ok) setApiStatus((prev) => ({ ...prev, [id]: 'success' }));
                     else setApiStatus((prev) => ({ ...prev, [id]: 'error' }));
@@ -3826,6 +3833,83 @@ You must design a visual composition that tells the story through **8 distinct p
                     setApiStatus((prev) => ({ ...prev, [id]: 'error' }));
                 }
                 setApiTesting(null);
+            };
+
+            const convertOpenAIContentToClaude = (content) => {
+                if (typeof content === 'string') return content;
+                if (!Array.isArray(content)) return String(content || '');
+                return content.map(block => {
+                    if (block.type === 'text') {
+                        return { type: 'text', text: block.text };
+                    }
+                    if (block.type === 'image_url' && block.image_url?.url) {
+                        const url = block.image_url.url;
+                        const dataMatch = url.match(/^data:([^;]+);base64,(.+)$/);
+                        if (dataMatch) {
+                            return {
+                                type: 'image',
+                                source: { type: 'base64', media_type: dataMatch[1], data: dataMatch[2] }
+                            };
+                        }
+                        return { type: 'text', text: `[Attached image: ${url}]` };
+                    }
+                    return { type: 'text', text: String(block.text || block.content || JSON.stringify(block)) };
+                });
+            };
+
+            const callChatApi = async (config, apiKey, messages, options = {}) => {
+                const baseUrl = (config?.url || DEFAULT_BASE_URL).replace(/\/+$/, '');
+                const isClaude = config?.format === 'claude';
+
+                let url, headers, body;
+                if (isClaude) {
+                    url = `${baseUrl}/v1/messages`;
+                    headers = {
+                        'x-api-key': apiKey,
+                        'anthropic-version': '2023-06-01',
+                        'Content-Type': 'application/json'
+                    };
+                    const systemMsg = messages.find(m => m.role === 'system');
+                    const system = systemMsg?.content;
+                    const claudeMessages = messages.filter(m => m.role !== 'system').map(m => ({
+                        role: m.role === 'assistant' ? 'assistant' : 'user',
+                        content: convertOpenAIContentToClaude(m.content)
+                    }));
+                    body = JSON.stringify({
+                        model: config?.modelName || 'claude-3-opus-20240229',
+                        max_tokens: options.maxTokens || 4096,
+                        ...(system ? { system: typeof system === 'string' ? system : system.map ? system.map(b => b.type === 'text' ? b : { type: 'text', text: JSON.stringify(b) }) : String(system) } : {}),
+                        messages: claudeMessages
+                    });
+                } else {
+                    url = `${baseUrl}/v1/chat/completions`;
+                    headers = {
+                        Authorization: `Bearer ${apiKey}`,
+                        'Content-Type': 'application/json'
+                    };
+                    body = JSON.stringify({
+                        model: config?.modelName || 'gemini-3-pro-preview',
+                        messages,
+                        stream: false,
+                        ...(options.temperature !== undefined ? { temperature: options.temperature } : {})
+                    });
+                }
+
+                const fetchOptions = { method: 'POST', headers, body };
+                if (options.signal) fetchOptions.signal = options.signal;
+
+                const response = await fetch(url, fetchOptions);
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(errText || `API Error: ${response.status}`);
+                }
+                const data = await response.json();
+
+                if (isClaude && data.content) {
+                    const text = data.content.filter(c => c.type === 'text').map(c => c.text).join('');
+                    data.choices = [{ message: { content: text } }];
+                }
+                return data;
             };
 
             const getStatusColor = (modelId) => {
@@ -4064,25 +4148,7 @@ You must design a visual composition that tells the story through **8 distinct p
                 apiMessages.push({ role: 'user', content: currentContent });
 
                 try {
-                    const response = await fetch(`${baseUrl}/v1/chat/completions`, {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${apiKey}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            model: config?.modelName || 'gemini-3-pro-preview',
-                            messages: apiMessages,
-                            stream: false 
-                        })
-                    });
-
-                    if (!response.ok) {
-                        const errText = await response.text();
-                        throw new Error(errText || `API Error: ${response.status}`);
-                    }
-
-                    const data = await response.json();
+                    const data = await callChatApi(config, apiKey, apiMessages);
                     // 支持多种响应格式
                     let aiContent = null;
                     if (data.choices && data.choices.length > 0) {
@@ -9250,21 +9316,9 @@ You must design a visual composition that tells the story through **8 distinct p
                         const controller = new AbortController();
                         const timeoutId = setTimeout(() => controller.abort(), 60000);
                         
-                        let response;
+                        let data;
                         try {
-                            response = await fetch(`${baseUrl}/v1/chat/completions`, {
-                                method: 'POST',
-                                headers: {
-                                    'Authorization': `Bearer ${apiKey}`,
-                                    'Content-Type': 'application/json'
-                                },
-                                body: JSON.stringify({
-                                    model: config?.modelName || 'gemini-3-pro-preview',
-                                    messages: apiMessages,
-                                    stream: false
-                                }),
-                                signal: controller.signal
-                            });
+                            data = await callChatApi(config, apiKey, apiMessages, { signal: controller.signal });
                         } catch (fetchError) {
                             clearTimeout(timeoutId);
                             // 处理网络错误
@@ -9278,18 +9332,6 @@ You must design a visual composition that tells the story through **8 distinct p
                         } finally {
                             clearTimeout(timeoutId);
                         }
-                        
-                        if (!response.ok) {
-                            let errText = '';
-                            try {
-                                errText = await response.text();
-                            } catch (e) {
-                                errText = `HTTP ${response.status}: ${response.statusText}`;
-                            }
-                            throw new Error(errText || `API Error: ${response.status}`);
-                        }
-                        
-                        const data = await response.json();
                         console.log('[视频拆解] API 响应数据:', { 
                             hasData: !!data, 
                             hasChoices: !!data.choices, 
@@ -9550,21 +9592,9 @@ You must design a visual composition that tells the story through **8 distinct p
                     const controller = new AbortController();
                     const timeoutId = setTimeout(() => controller.abort(), 120000);
                     
-                    let response;
+                    let data;
                     try {
-                        response = await fetch(`${baseUrl}/v1/chat/completions`, {
-                            method: 'POST',
-                            headers: {
-                                'Authorization': `Bearer ${apiKey}`,
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({
-                                model: config?.modelName || 'gemini-3-pro-preview',
-                                messages: apiMessages,
-                                stream: false
-                            }),
-                            signal: controller.signal
-                        });
+                        data = await callChatApi(config, apiKey, apiMessages, { signal: controller.signal });
                     } catch (fetchError) {
                         clearTimeout(timeoutId);
                         // 处理网络错误
@@ -9578,18 +9608,6 @@ You must design a visual composition that tells the story through **8 distinct p
                     } finally {
                         clearTimeout(timeoutId);
                     }
-                    
-                    if (!response.ok) {
-                        let errText = '';
-                        try {
-                            errText = await response.text();
-                        } catch (e) {
-                            errText = `HTTP ${response.status}: ${response.statusText}`;
-                        }
-                        throw new Error(errText || `API Error: ${response.status}`);
-                    }
-                    
-                    const data = await response.json();
                     console.log('[AI导演拆解] API 响应数据:', { 
                         hasData: !!data, 
                         hasChoices: !!data.choices, 
@@ -10522,25 +10540,7 @@ You must design a visual composition that tells the story through **8 distinct p
                         { role: 'user', content: userContent }
                     ];
                     
-                    const response = await fetch(`${baseUrl}/v1/chat/completions`, {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${apiKey}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            model: config?.modelName || 'gemini-3-pro-preview',
-                            messages: apiMessages,
-                            stream: false
-                        })
-                    });
-                    
-                    if (!response.ok) {
-                        const errText = await response.text();
-                        throw new Error(errText || `API Error: ${response.status}`);
-                    }
-                    
-                    const data = await response.json();
+                    const data = await callChatApi(config, apiKey, apiMessages);
                     const aiContent = data.choices?.[0]?.message?.content || "{}";
                     
                     // 解析 JSON
@@ -16059,6 +16059,25 @@ You must design a visual composition that tells the story through **8 distinct p
                                                             />
                                                 </div>
                                                     ))}
+                                                    {api.type === 'Chat' && (
+                                                        <div className="grid grid-cols-4 items-center gap-2">
+                                                            <label className={`text-[10px] font-medium uppercase tracking-wider text-right ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-600'}`}>
+                                                                调用格式
+                                                            </label>
+                                                            <select
+                                                                value={api.format || 'openai'}
+                                                                onChange={(e) => updateApiConfig(api.id, { format: e.target.value })}
+                                                                className={`col-span-3 w-full rounded px-2 py-1 text-xs outline-none focus:border-blue-600/50 border ${
+                                                                    theme === 'dark'
+                                                                        ? 'bg-zinc-900 border-zinc-800 text-zinc-300'
+                                                                        : 'bg-white border-zinc-300 text-zinc-900'
+                                                                }`}
+                                                            >
+                                                                <option value="openai">OpenAI 格式 (/v1/chat/completions)</option>
+                                                                <option value="claude">Claude 格式 (/v1/messages)</option>
+                                                            </select>
+                                                        </div>
+                                                    )}
                                                 </div>
                                                 <div className={`mt-3 pt-2 border-t flex justify-end ${theme === 'dark' ? 'border-zinc-800/50' : 'border-zinc-200'}`}>
                                                     <button
