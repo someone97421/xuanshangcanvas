@@ -1753,6 +1753,7 @@ You must design a visual composition that tells the story through **8 distinct p
             const [chatFiles, setChatFiles] = useState([]); 
             const [chatModel, setChatModel] = useState('gemini-3-pro');
             const [isChatSending, setIsChatSending] = useState(false);
+            const [chatSystemPromptExpanded, setChatSystemPromptExpanded] = useState(false);
 
             const [lightboxItem, setLightboxItem] = useState(null);
 
@@ -3138,7 +3139,64 @@ You must design a visual composition that tells the story through **8 distinct p
                     setContextMenu({ visible: true, x: e.clientX, y: e.clientY, worldX: world.x, worldY: world.y, sourceNodeId: undefined });
                 }
             };
-            
+
+            const handleCanvasDragOver = (e) => {
+                e.preventDefault();
+            };
+
+            const handleCanvasDrop = async (e) => {
+                e.preventDefault();
+                const files = Array.from(e.dataTransfer.files);
+                if (files.length === 0) return;
+
+                const rect = canvasRef.current?.getBoundingClientRect();
+                if (!rect) return;
+                const worldX = (e.clientX - rect.left - view.x) / view.zoom;
+                const worldY = (e.clientY - rect.top - view.y) / view.zoom;
+
+                for (let i = 0; i < files.length; i++) {
+                    const file = files[i];
+                    const offsetX = i * 20;
+                    const offsetY = i * 20;
+
+                    if (file.type.startsWith('image/')) {
+                        const nodeId = addNode('input-image', worldX + offsetX, worldY + offsetY);
+                        setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, isUploading: true } : n));
+                        const reader = new FileReader();
+                        reader.onload = async (ev) => {
+                            const content = ev.target.result;
+                            let dimensions = { w: 0, h: 0 };
+                            try { dimensions = await getImageDimensions(content); } catch (e) {}
+                            setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, content, dimensions, isUploading: false } : n));
+                        };
+                        reader.onerror = () => {
+                            setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, isUploading: false } : n));
+                        };
+                        reader.readAsDataURL(file);
+                    } else if (file.type.startsWith('video/')) {
+                        const nodeId = addNode('video-input', worldX + offsetX, worldY + offsetY);
+                        setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, isUploading: true } : n));
+                        const reader = new FileReader();
+                        reader.onload = async (ev) => {
+                            const content = ev.target.result;
+                            let videoMeta = { duration: 0, w: 0, h: 0 };
+                            try { videoMeta = await getVideoMetadata(content); } catch (e) {}
+                            setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, content, videoMeta, frames: [], selectedKeyframes: [], extractingFrames: false, videoFileName: file.name, isUploading: false } : n));
+                        };
+                        reader.onerror = () => {
+                            setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, isUploading: false } : n));
+                        };
+                        reader.readAsDataURL(file);
+                    } else if (file.type.startsWith('audio/')) {
+                        const nodeId = addNode('audio-input', worldX + offsetX, worldY + offsetY);
+                        await handleAudioFileUpload(nodeId, file);
+                    } else {
+                        const text = await file.text().catch(() => `文件: ${file.name}`);
+                        addNode('text-node', worldX + offsetX, worldY + offsetY, undefined, text || `文件: ${file.name}`);
+                    }
+                }
+            };
+
             const connectedReferenceAssetsCache = useMemo(() => {
                 const cache = new Map();
                 connections.forEach(conn => {
@@ -3796,6 +3854,10 @@ You must design a visual composition that tells the story through **8 distinct p
                 }
             };
 
+            const updateChatSystemPrompt = (text) => {
+                setChatSessions(prev => prev.map(s => s.id === currentChatId ? { ...s, systemPrompt: text } : s));
+            };
+
             const handleChatFileUpload = (e) => {
                 const files = Array.from(e.target.files);
                 files.forEach(file => {
@@ -3924,10 +3986,11 @@ You must design a visual composition that tells the story through **8 distinct p
                     ? allMessages.slice(-MAX_HISTORY_MESSAGES)
                     : allMessages;
 
+                const sessionSystemPrompt = sessionToUse?.systemPrompt?.trim();
                 let apiMessages = [
                     {
                         role: 'system',
-                        content: '你是一名多模态AI助手，需要结合整个对话的上下文进行连续回答。'
+                        content: sessionSystemPrompt || '你是一名多模态AI助手，需要结合整个对话的上下文进行连续回答。'
                     },
                     ...recentMessages.map(m => ({
                         role: m.role,
@@ -4719,7 +4782,58 @@ You must design a visual composition that tells the story through **8 distinct p
                             return;
                         }
                     }
-                    
+
+                    // 优先级2.5：剪贴板文件粘贴到画布空白处
+                    const clipboardFiles = Array.from(e.clipboardData.files);
+                    if (clipboardFiles.length > 0) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const canvasElement = canvasRef.current;
+                        let pasteX = 0, pasteY = 0;
+                        if (canvasElement) {
+                            const rect = canvasElement.getBoundingClientRect();
+                            pasteX = (rect.left + rect.width / 2 - view.x) / view.zoom;
+                            pasteY = (rect.top + rect.height / 2 - view.y) / view.zoom;
+                        }
+                        for (let i = 0; i < clipboardFiles.length; i++) {
+                            const file = clipboardFiles[i];
+                            const offsetX = i * 20;
+                            const offsetY = i * 20;
+                            if (file.type.startsWith('image/')) {
+                                const nodeId = addNode('input-image', pasteX + offsetX, pasteY + offsetY);
+                                setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, isUploading: true } : n));
+                                const reader = new FileReader();
+                                reader.onload = async (ev) => {
+                                    const content = ev.target.result;
+                                    let dimensions = { w: 0, h: 0 };
+                                    try { dimensions = await getImageDimensions(content); } catch (e) {}
+                                    setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, content, dimensions, isUploading: false } : n));
+                                };
+                                reader.onerror = () => setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, isUploading: false } : n));
+                                reader.readAsDataURL(file);
+                            } else if (file.type.startsWith('video/')) {
+                                const nodeId = addNode('video-input', pasteX + offsetX, pasteY + offsetY);
+                                setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, isUploading: true } : n));
+                                const reader = new FileReader();
+                                reader.onload = async (ev) => {
+                                    const content = ev.target.result;
+                                    let videoMeta = { duration: 0, w: 0, h: 0 };
+                                    try { videoMeta = await getVideoMetadata(content); } catch (e) {}
+                                    setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, content, videoMeta, frames: [], selectedKeyframes: [], extractingFrames: false, videoFileName: file.name, isUploading: false } : n));
+                                };
+                                reader.onerror = () => setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, isUploading: false } : n));
+                                reader.readAsDataURL(file);
+                            } else if (file.type.startsWith('audio/')) {
+                                const nodeId = addNode('audio-input', pasteX + offsetX, pasteY + offsetY);
+                                await handleAudioFileUpload(nodeId, file);
+                            } else {
+                                const text = await file.text().catch(() => `文件: ${file.name}`);
+                                addNode('text-node', pasteX + offsetX, pasteY + offsetY, undefined, text || `文件: ${file.name}`);
+                            }
+                        }
+                        return;
+                    }
+
                     // 优先级3：节点粘贴
                     if (copiedNodesRef.current && copiedNodesRef.current.nodes && copiedNodesRef.current.nodes.length > 0) {
                         e.preventDefault();
@@ -4896,7 +5010,7 @@ You must design a visual composition that tells the story through **8 distinct p
                     window.removeEventListener('paste', handlePaste);
                     window.removeEventListener('keydown', handleKeyDown);
                 };
-            }, [updateNodeSettings, handleVideoFileUpload, setNodes, setConnections, setSelectedNodeId, setSelectedNodeIds, view]);
+            }, [updateNodeSettings, handleVideoFileUpload, handleAudioFileUpload, addNode, setNodes, setConnections, setSelectedNodeId, setSelectedNodeIds, view]);
 
             const pollVeoJob = async (jobId, taskId, baseUrl, apiKey, w, h, attempt = 0) => {
                 const maxAttempts = 90; // 增加到90次，支持最长360秒（6分钟）的生成时间
@@ -8020,7 +8134,7 @@ You must design a visual composition that tells the story through **8 distinct p
                         : type === 'rh-image'
                             ? { model: 'rh-image-v2', ratio: '1:1', resolution: '2K', prompt: '', promptHtml: '' }
                         : type === 'gen-video'
-                            ? { model: 'seedance-2.0-fast', duration: '5s', ratio: '16:9', resolution: '480p', seed: -1, generateAudio: true, videoPrompt: '' }
+                            ? { model: 'seedance-2.0-fast', duration: 5, ratio: '16:9', resolution: '480p', seed: -1, generateAudio: true, videoPrompt: '' }
                             : type === 'audio-input'
                                 ? {}
                             : type === 'video-analyze'
@@ -8062,6 +8176,7 @@ You must design a visual composition that tells the story through **8 distinct p
                 setConnectingSource(null);
                 setConnectingTarget(null);
                 setConnectingInputType(null);
+                return newNode.id;
             };
 
             const deleteNode = useCallback((id) => {
@@ -8168,16 +8283,16 @@ You must design a visual composition that tells the story through **8 distinct p
 
             // 获取模型的默认时长
             const getDefaultDurationForModel = (modelId) => {
-                if (!modelId) return '5s';
-                if (modelId.includes('seedance')) return '5s';
-                return '5s';
+                if (!modelId) return 5;
+                if (modelId.includes('seedance')) return 5;
+                return 5;
             };
 
-            // 获取模型可用的时长选项
+            // 获取模型可用的时长选项（保留兼容，但 UI 已改为数字输入）
             const getDefaultDurationsForModel = (modelId) => {
-                if (!modelId) return ['5s', '10s', '15s'];
-                if (modelId.includes('seedance')) return ['5s', '10s', '15s'];
-                return ['5s', '10s', '15s'];
+                if (!modelId) return [5, 10, 15];
+                if (modelId.includes('seedance')) return [5, 10, 15];
+                return [5, 10, 15];
             };
 
             // 分镜表节点功能函数
@@ -10990,9 +11105,9 @@ You must design a visual composition that tells the story through **8 distinct p
                                     {node.type === 'input-image' ? '图片' : 
                                      node.type === 'video-input' ? '视频' : 
                                      node.type === 'audio-input' ? '音频' :
-                                     node.type === 'gen-image' ? '生成图片' : 
+                                     node.type === 'gen-image' ? 'seedream图像生成' :
                                      node.type === 'rh-image' ? 'RH 全能图片' :
-                                     node.type === 'gen-video' ? '生成视频' : 
+                                     node.type === 'gen-video' ? 'seedance2.0视频生成' : 
                                      node.type === 'text-node' ? '文字' : 
                                      node.type === 'preview' ? '预览' : 
                                      node.type || '节点'}
@@ -11181,9 +11296,10 @@ You must design a visual composition that tells the story through **8 distinct p
                         onMouseLeave={() => { if ((connectingSource || connectingTarget) && hoverTargetId === node.id) setHoverTargetId(null); }}
                         onMouseUp={(e) => handleNodeMouseUp(node.id, e)}
                         onDoubleClick={(e) => {
+                            // 阻止双击事件冒泡到画布，避免在节点上触发创建新节点的上下文菜单
+                            e.stopPropagation();
                             // 功能6：双击图片或视频节点显示预览弹窗
                             if ((node.type === 'input-image' || node.type === 'video-input') && node.content) {
-                                e.stopPropagation();
                                 setLightboxItem({ url: node.content, type: isVideoUrl(node.content) ? 'video' : 'image' });
                             }
                         }}
@@ -11292,11 +11408,19 @@ You must design a visual composition that tells the story through **8 distinct p
                                 >
                                     {node.content ? (
                                         <div className="relative w-full h-full">
+                                            {node.isUploading && (
+                                                <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/60">
+                                                    <div className="text-white text-sm font-medium flex items-center gap-2">
+                                                        <Loader2 size={16} className="animate-spin" />
+                                                        <span>上传中</span>
+                                                    </div>
+                                                </div>
+                                            )}
                                             {isVideoUrl(node.content) ? (
-                                                 <video 
-                                                    src={node.content} 
-                                                    controls 
-                                                    className="w-full h-full object-contain bg-black/50" 
+                                                 <video
+                                                    src={node.content}
+                                                    controls
+                                                    className="w-full h-full object-contain bg-black/50"
                                                     draggable={false}
                                                     style={{
                                                         imageRendering: view.zoom >= 1 ? 'auto' : 'crisp-edges',
@@ -11307,9 +11431,9 @@ You must design a visual composition that tells the story through **8 distinct p
                                                     }}
                                                 />
                                             ) : (
-                                                 <img 
-                                                    src={node.content} 
-                                                    className="w-full h-full object-contain bg-black/50" 
+                                                 <img
+                                                    src={node.content}
+                                                    className="w-full h-full object-contain bg-black/50"
                                                     draggable={false}
                                                     loading="lazy"
                                                     style={{
@@ -11492,6 +11616,14 @@ You must design a visual composition that tells the story through **8 distinct p
                                         {node.content ? (
                                             <div className="space-y-2">
                                                 <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden flex items-center justify-center">
+                                                    {node.isUploading && (
+                                                        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/60">
+                                                            <div className="text-white text-sm font-medium flex items-center gap-2">
+                                                                <Loader2 size={16} className="animate-spin" />
+                                                                <span>上传中</span>
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                     <video
                                                         src={node.content}
                                                         controls
@@ -12447,28 +12579,30 @@ You must design a visual composition that tells the story through **8 distinct p
                                                                     ))}
                                                                 </select>
                                                                 
-                                                                {/* Duration Select */}
+                                                                {/* Duration Input */}
                                                                 {(() => {
-                                                                    const currentModel = shot.model || (apiConfigs.find(c => c.type === 'Video' && c.id === 'seedance-2.0-fast')?.id || apiConfigs.find(c => c.type === 'Video' && c.id === 'seedance-2.0')?.id || apiConfigs.find(c => c.type === 'Video')?.id || '');
-                                                                    const config = apiConfigs.find(c => c.id === currentModel);
-                                                                    const availableDurations = config?.durations || getDefaultDurationsForModel(currentModel);
-                                                                    const defaultDuration = getDefaultDurationForModel(currentModel);
+                                                                    const raw = shot.duration ?? 5;
+                                                                    const num = typeof raw === 'number' ? raw : parseInt(String(raw).replace(/\D/g, ''), 10);
+                                                                    const value = isNaN(num) ? 5 : Math.max(4, Math.min(15, num));
                                                                     return (
-                                                                        <select
-                                                                            value={shot.duration || defaultDuration}
-                                                                            onChange={(e) => updateShot(node.id, shot.id, { duration: e.target.value })}
+                                                                        <input
+                                                                            type="number"
+                                                                            min={4}
+                                                                            max={15}
+                                                                            value={value}
+                                                                            onChange={(e) => {
+                                                                                const val = parseInt(e.target.value, 10);
+                                                                                updateShot(node.id, shot.id, { duration: isNaN(val) ? 5 : Math.max(4, Math.min(15, val)) });
+                                                                            }}
                                                                             onClick={(e) => e.stopPropagation()}
                                                                             onMouseDown={(e) => e.stopPropagation()}
-                                                                            className={`text-xs px-2 py-1 rounded border outline-none transition-colors ${
+                                                                            className={`w-14 text-xs px-2 py-1 rounded border outline-none transition-colors ${
                                                                                 theme === 'dark'
                                                                                     ? 'bg-zinc-800 border-zinc-700 text-zinc-200 hover:border-zinc-600'
                                                                                     : 'bg-white border-zinc-300 text-zinc-800 hover:border-zinc-400'
                                                                             }`}
-                                                                        >
-                                                                            {availableDurations.map(duration => (
-                                                                                <option key={duration} value={duration}>{duration}</option>
-                                                                            ))}
-                                                                        </select>
+                                                                            title="时长（4-15秒）"
+                                                                        />
                                                                     );
                                                                 })()}
                                                             </div>
@@ -13103,7 +13237,7 @@ You must design a visual composition that tells the story through **8 distinct p
                                         }`}
                                     >
                                         {node.type === 'gen-video' ? <Video size={12} className="text-purple-400" /> : <Wand2 size={12} className="text-blue-400" />}
-                                        <span>{node.type === 'gen-video' ? 'AI 视频' : node.type === 'rh-image' ? 'RH 全能图片' : 'AI 绘图'}</span>
+                                        <span>{node.type === 'gen-video' ? 'seedance2.0视频生成' : node.type === 'rh-image' ? 'RH 全能图片' : 'seedream图像生成'}</span>
                                     </div>
                                     {((node.type === 'gen-video' ? referenceAssets.length > 0 : connectedImages.length > 0)) && (
                                         <div
@@ -13681,7 +13815,7 @@ You must design a visual composition that tells the story through **8 distinct p
                                                                     const nextSettings = { model: m.id };
                                                                     if (m.id === 'seedance-2.0' || m.id === 'seedance-2.0-fast') {
                                                                         nextSettings.ratio = '16:9';
-                                                                        nextSettings.duration = '5s';
+                                                                        nextSettings.duration = 5;
                                                                         nextSettings.resolution = '480p';
                                                                         nextSettings.seed = -1;
                                                                         nextSettings.generateAudio = true;
@@ -13915,45 +14049,27 @@ You must design a visual composition that tells the story through **8 distinct p
                                                     const isMidjourney = currentModel && (currentModel.id.includes('mj') || currentModel.provider.toLowerCase().includes('midjourney'));
                                                     return !isMidjourney ? (
                                                 <>
-                                                <div className="relative">
-                                                            <button
-                                                                onClick={e => { e.stopPropagation(); setActiveDropdown(activeDropdown?.type === 'duration' && activeDropdown.nodeId === node.id ? null : { nodeId: node.id, type: 'duration' }); }}
-                                                                className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] border ${
-                                                                    theme === 'dark'
-                                                                        ? 'bg-zinc-800/50 hover:bg-zinc-800 text-zinc-400 border-zinc-700/50'
-                                                                        : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-600 border-zinc-300'
-                                                                }`}
-                                                            >
-                                                        {node.settings?.duration || '5s'}
-                                                    </button>
-                                                    {activeDropdown?.nodeId === node.id && activeDropdown.type === 'duration' && (
-                                                                <div
-                                                                    className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-1 w-20 rounded-lg shadow-xl p-1 z-[60] border ${
-                                                                        theme === 'dark'
-                                                                            ? 'bg-[#18181b] border-zinc-700'
-                                                                            : 'bg-white border-zinc-200'
-                                                                    }`}
-                                                                    onMouseDown={e => e.stopPropagation()}
-                                                                >
-                                                                    {(apiConfigs.find(c => c.id === node.settings?.model)?.durations || ['5s', '10s']).map(d => (
-                                                                        <button
-                                                                            key={d}
-                                                                            onClick={() => {
-                                                                                updateNodeSettings(node.id, { duration: d });
-                                                                                setActiveDropdown(null);
-                                                                            }}
-                                                                            className={`w-full text-center py-1 text-[10px] rounded ${
-                                                                                theme === 'dark'
-                                                                                    ? 'text-zinc-300 hover:bg-zinc-800'
-                                                                                    : 'text-zinc-700 hover:bg-zinc-100'
-                                                                            }`}
-                                                                        >
-                                                                            {d}
-                                                                        </button>
-                                                                    ))}
-                                                        </div>
-                                                    )}
-                                                </div>
+                                                <input
+                                                    type="number"
+                                                    min={4}
+                                                    max={15}
+                                                    value={(() => {
+                                                        const val = node.settings?.duration;
+                                                        const num = typeof val === 'number' ? val : parseInt(String(val || '5').replace(/\D/g, ''), 10);
+                                                        return isNaN(num) ? 5 : Math.max(4, Math.min(15, num));
+                                                    })()}
+                                                    onChange={(e) => {
+                                                        const val = parseInt(e.target.value, 10);
+                                                        updateNodeSettings(node.id, { duration: isNaN(val) ? 5 : Math.max(4, Math.min(15, val)) });
+                                                    }}
+                                                    onMouseDown={e => e.stopPropagation()}
+                                                    className={`w-14 px-2 py-1 rounded text-[10px] border outline-none ${
+                                                        theme === 'dark'
+                                                            ? 'bg-zinc-800/50 text-zinc-300 border-zinc-700/50'
+                                                            : 'bg-zinc-100 text-zinc-700 border-zinc-300'
+                                                    }`}
+                                                    title="时长（4-15秒）"
+                                                />
                                                     {node.type === 'gen-video' && (
                                                         <>
                                                             <input
@@ -14825,6 +14941,7 @@ You must design a visual composition that tells the story through **8 distinct p
                         <div className="flex-1 relative overflow-hidden flex">
                              <div ref={canvasRef} id="canvas-bg" className="flex-1 h-full cursor-default relative"
                                 onMouseDown={handleMouseDown} onClick={handleBackgroundClick} onDoubleClick={handleDoubleClick}
+                                onDragOver={handleCanvasDragOver} onDrop={handleCanvasDrop}
                                 style={{ 
                                     backgroundImage: theme === 'dark' 
                                         ? 'radial-gradient(#27272a 1px, transparent 1px)' 
@@ -15003,6 +15120,36 @@ You must design a visual composition that tells the story through **8 distinct p
                                             <ChevronRight size={16} />
                                         </button>
                                     </div>
+                                </div>
+                                {/* 系统提示词栏 */}
+                                <div className={`px-3 pt-2 pb-1 border-b ${theme === 'dark' ? 'border-zinc-800' : 'border-zinc-200'}`}>
+                                    <button
+                                        onClick={() => setChatSystemPromptExpanded(v => !v)}
+                                        className={`w-full flex items-center justify-between text-xs py-1 px-2 rounded transition-colors ${
+                                            theme === 'dark'
+                                                ? 'text-zinc-400 hover:bg-zinc-800/50'
+                                                : 'text-zinc-600 hover:bg-zinc-100'
+                                        }`}
+                                    >
+                                        <span className="flex items-center gap-1">
+                                            <Settings size={12} />
+                                            <span>系统提示词</span>
+                                        </span>
+                                        <span className={`transform transition-transform ${chatSystemPromptExpanded ? 'rotate-180' : ''}`}>▼</span>
+                                    </button>
+                                    {chatSystemPromptExpanded && (
+                                        <textarea
+                                            value={currentSession?.systemPrompt || ''}
+                                            onChange={(e) => updateChatSystemPrompt(e.target.value)}
+                                            placeholder="输入系统提示词，将自动保存到当前会话..."
+                                            className={`w-full mt-2 text-xs rounded px-2 py-1.5 outline-none resize-none custom-scrollbar ${
+                                                theme === 'dark'
+                                                    ? 'bg-zinc-900 border border-zinc-800 text-zinc-300 placeholder-zinc-600'
+                                                    : 'bg-zinc-50 border border-zinc-200 text-zinc-800 placeholder-zinc-400'
+                                            }`}
+                                            rows={3}
+                                        />
+                                    )}
                                 </div>
                                 <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4 select-text">
                                     {currentSession?.messages.map((msg) => (
@@ -15746,6 +15893,16 @@ You must design a visual composition that tells the story through **8 distinct p
                                     </div>
                                     <div className="flex justify-between items-center mb-2">
                                         <span className={`text-xs ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>当前保留 Gemini、Seedream、RH 与 Seedance 配置。</span>
+                                        <button
+                                            onClick={addNewModel}
+                                            className={`text-xs px-2 py-1 rounded border transition-colors ${
+                                                theme === 'dark'
+                                                    ? 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700'
+                                                    : 'bg-white text-zinc-700 border-zinc-300 hover:bg-zinc-100'
+                                            }`}
+                                        >
+                                            + 添加自定义模型
+                                        </button>
                                     </div>
                                     <div className="space-y-3 max-h-[50vh] overflow-y-auto custom-scrollbar pr-1">
                                         {apiConfigs.filter(api => !DELETED_MODEL_IDS.includes(api.id)).map((api) => (
@@ -15782,11 +15939,12 @@ You must design a visual composition that tells the story through **8 distinct p
                                                 </div>
                                                 <div className="space-y-2 pl-1">
                                                     {[
+                                                        { key: 'provider', label: '显示名称', type: 'text', placeholder: 'My Model' },
                                                         { key: 'modelName', label: 'Model ID', type: 'text', placeholder: 'model-id' },
-                                                        { 
-                                                            key: 'key', 
+                                                        {
+                                                            key: 'key',
                                                             label: (api.id.includes('seedream') || api.id.includes('seedance')) ? 'API Key（Ark 共用）' : 'API Key',
-                                                            type: 'password', 
+                                                            type: 'password',
                                                             placeholder: api.id.includes('rh-image') ? '粘贴 RunningHub Key...' : 'sk-...'
                                                         },
                                                         { key: 'url', label: 'Base URL', type: 'text', placeholder: 'https://...' },
