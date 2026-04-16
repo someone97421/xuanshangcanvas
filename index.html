@@ -3812,14 +3812,19 @@ You must design a visual composition that tells the story through **8 distinct p
                     const isSeedreamConfig = id.includes('seedream');
                     const isSeedanceConfig = id.includes('seedance');
                     const isRunningHubConfig = id.includes('rh-image');
+                    const isChatConfig = config?.type === 'Chat';
                     const isClaudeFormat = config?.format === 'claude';
+                    const chatBase = (config?.url || DEFAULT_BASE_URL).replace(/\/+$/, '');
+                    const resolvedChatUrl = isChatConfig ? resolveChatEndpoint(chatBase, isClaudeFormat ? 'claude' : 'openai') : null;
                     const testUrl = isSeedreamConfig
                         ? `${config?.url || ARK_MEDIA_API_BASE_URL}/images/generations`
                         : isSeedanceConfig
                             ? `${config?.url || ARK_MEDIA_API_BASE_URL}/contents/generations/tasks`
                             : isRunningHubConfig
                                 ? `${config?.url || RUNNINGHUB_API_BASE_URL}/query`
-                                : `${config?.url || DEFAULT_BASE_URL}/v1/models`;
+                                : isChatConfig && resolvedChatUrl
+                                    ? resolvedChatUrl.replace(/\/messages$/, '/models').replace(/\/chat\/completions$/, '/models')
+                                    : `${chatBase}/v1/models`;
                     const headers = isClaudeFormat
                         ? { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' }
                         : { Authorization: `Bearer ${apiKey}` };
@@ -3829,7 +3834,8 @@ You must design a visual composition that tells the story through **8 distinct p
                     });
                     if (response.ok) setApiStatus((prev) => ({ ...prev, [id]: 'success' }));
                     else setApiStatus((prev) => ({ ...prev, [id]: 'error' }));
-                } catch {
+                } catch (err) {
+                    console.error('[testApiConnection] error', err);
                     setApiStatus((prev) => ({ ...prev, [id]: 'error' }));
                 }
                 setApiTesting(null);
@@ -3857,13 +3863,25 @@ You must design a visual composition that tells the story through **8 distinct p
                 });
             };
 
+            const resolveChatEndpoint = (baseUrl, format) => {
+                const clean = baseUrl.replace(/\/+$/, '');
+                if (format === 'claude') {
+                    if (clean.endsWith('/v1/messages')) return clean;
+                    if (clean.endsWith('/v1')) return `${clean}/messages`;
+                    return `${clean}/v1/messages`;
+                }
+                if (clean.endsWith('/v1/chat/completions')) return clean;
+                if (clean.endsWith('/v1')) return `${clean}/chat/completions`;
+                return `${clean}/v1/chat/completions`;
+            };
+
             const callChatApi = async (config, apiKey, messages, options = {}) => {
                 const baseUrl = (config?.url || DEFAULT_BASE_URL).replace(/\/+$/, '');
                 const isClaude = config?.format === 'claude';
+                const url = resolveChatEndpoint(baseUrl, isClaude ? 'claude' : 'openai');
 
-                let url, headers, body;
+                let headers, body;
                 if (isClaude) {
-                    url = `${baseUrl}/v1/messages`;
                     headers = {
                         'x-api-key': apiKey,
                         'anthropic-version': '2023-06-01',
@@ -3882,7 +3900,6 @@ You must design a visual composition that tells the story through **8 distinct p
                         messages: claudeMessages
                     });
                 } else {
-                    url = `${baseUrl}/v1/chat/completions`;
                     headers = {
                         Authorization: `Bearer ${apiKey}`,
                         'Content-Type': 'application/json'
@@ -3898,7 +3915,19 @@ You must design a visual composition that tells the story through **8 distinct p
                 const fetchOptions = { method: 'POST', headers, body };
                 if (options.signal) fetchOptions.signal = options.signal;
 
-                const response = await fetch(url, fetchOptions);
+                console.log('[callChatApi] request', { url, format: isClaude ? 'claude' : 'openai', headers: Object.keys(headers), bodyLength: body.length });
+
+                let response;
+                try {
+                    response = await fetch(url, fetchOptions);
+                } catch (netErr) {
+                    const isCors = netErr?.message?.includes('Failed to fetch');
+                    const hint = isCors
+                        ? `网络请求被阻止（可能是 CORS 跨域限制）。${isClaude ? 'Anthropic 官方 API 默认不支持浏览器直接调用，建议使用支持 CORS 的代理，或确认 Base URL 正确。' : '请检查 Base URL 是否正确，以及服务端是否允许跨域。'}`
+                        : netErr?.message || '网络请求失败';
+                    throw new Error(hint);
+                }
+
                 if (!response.ok) {
                     const errText = await response.text();
                     throw new Error(errText || `API Error: ${response.status}`);
