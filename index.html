@@ -3878,7 +3878,7 @@ You must design a visual composition that tells the story through **8 distinct p
                     body = JSON.stringify({
                         model: config?.modelName || 'claude-3-opus-20240229',
                         max_tokens: options.maxTokens || 4096,
-                        ...(system ? { system: typeof system === 'string' ? system : system.map ? system.map(b => b.type === 'text' ? b : { type: 'text', text: JSON.stringify(b) }) : String(system) } : {}),
+                        ...(system ? { system: typeof system === 'string' ? system : Array.isArray(system) ? system.map(b => b.type === 'text' ? b.text : JSON.stringify(b)).join('') : String(system) } : {}),
                         messages: claudeMessages
                     });
                 } else {
@@ -4145,7 +4145,7 @@ You must design a visual composition that tells the story through **8 distinct p
                     }
                 });
 
-                apiMessages.push({ role: 'user', content: currentContent });
+                apiMessages[apiMessages.length - 1] = { role: 'user', content: currentContent };
 
                 try {
                     const data = await callChatApi(config, apiKey, apiMessages);
