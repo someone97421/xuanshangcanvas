@@ -1098,6 +1098,12 @@
         };
         const ALLOWED_API_CONFIG_IDS = ['gemini-3-pro', 'seedream-5.0', 'seedream-4.5', 'seedream-4.0', 'rh-image-pro', 'rh-image-v2', 'seedance-2.0', 'seedance-2.0-fast'];
 
+        // --- Asset API 配置 (用于 seedance-asset 节点拉取素材信息) ---
+        const ASSET_API_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3';
+        const ASSET_API_REGION = 'cn-beijing';
+        const ASSET_API_SERVICE = 'ark';
+        const ASSET_API_VERSION = '2024-01-01';
+
         const RATIOS = ['Auto', '1:1', '16:9', '9:16', '4:3', '3:4', '21:9', '3:2', '2:3'];
         const GROK_VIDEO_RATIOS = ['3:2', '2:3', '1:1'];
         const VIDEO_RES_OPTIONS = ['480p', '720p'];
@@ -1686,6 +1692,8 @@ You must design a visual composition that tells the story through **8 distinct p
                 return mergedConfigs.filter(c => ALLOWED_API_CONFIG_IDS.includes(c.id));
             });
             const [globalApiKey, setGlobalApiKey] = useState(() => localStorage.getItem('tapnow_global_key') || '');
+            const [assetApiKey, setAssetApiKey] = useState(() => localStorage.getItem('tapnow_asset_api_ak') || '');
+            const [assetApiSecret, setAssetApiSecret] = useState(() => localStorage.getItem('tapnow_asset_api_sk') || '');
             const [tempHostingConfig, setTempHostingConfig] = useState(() => {
                 try {
                     const saved = localStorage.getItem('tapnow_temp_hosting_config');
@@ -1823,9 +1831,9 @@ You must design a visual composition that tells the story through **8 distinct p
             const [settingsOpen, setSettingsOpen] = useState(false);
             const [historyOpen, setHistoryOpen] = useState(false);
             const [charactersOpen, setCharactersOpen] = useState(false);
-            const [characterLibrary, setCharacterLibrary] = useState(() => {
+            const [seedanceCharacterLibrary, setSeedanceCharacterLibrary] = useState(() => {
                 try {
-                    const saved = localStorage.getItem('tapnow_characters');
+                    const saved = localStorage.getItem('tapnow_seedance_characters');
                     return saved ? JSON.parse(saved) : [];
                 } catch (e) {
                     console.error('加载角色库失败:', e);
@@ -1833,14 +1841,13 @@ You must design a visual composition that tells the story through **8 distinct p
                 }
             });
             const [createCharacterOpen, setCreateCharacterOpen] = useState(false);
-            const [createCharacterVideoSourceType, setCreateCharacterVideoSourceType] = useState('url');
-            const [createCharacterVideoUrl, setCreateCharacterVideoUrl] = useState('');
-            const [createCharacterSelectedTaskId, setCreateCharacterSelectedTaskId] = useState('');
-            const [createCharacterStartSecond, setCreateCharacterStartSecond] = useState(1);
-            const [createCharacterEndSecond, setCreateCharacterEndSecond] = useState(3);
-            const [createCharacterEndpoint, setCreateCharacterEndpoint] = useState('');
-            const [createCharacterSubmitting, setCreateCharacterSubmitting] = useState(false);
-            const [createCharacterVideoError, setCreateCharacterVideoError] = useState(null);
+            const [createGroupName, setCreateGroupName] = useState('');
+            const [createGroupDesc, setCreateGroupDesc] = useState('');
+            const [createGroupSubmitting, setCreateGroupSubmitting] = useState(false);
+            const [pullCloudOpen, setPullCloudOpen] = useState(false);
+            const [pullCloudId, setPullCloudId] = useState('');
+            const [pullCloudType, setPullCloudType] = useState('group'); // 'group' | 'asset'
+            const [pullCloudSubmitting, setPullCloudSubmitting] = useState(false);
             const [characterReferenceBarExpanded, setCharacterReferenceBarExpanded] = useState({});
             const [batchModalOpen, setBatchModalOpen] = useState(false);
             const [batchSelectedIds, setBatchSelectedIds] = useState(new Set());
@@ -1917,20 +1924,15 @@ You must design a visual composition that tells the story through **8 distinct p
             // 保存角色库到 localStorage（使用防抖优化）
             const debouncedSaveCharacters = useMemo(() => debounce((charactersToSave) => {
                 try {
-                    localStorage.setItem('tapnow_characters', JSON.stringify(charactersToSave));
+                    localStorage.setItem('tapnow_seedance_characters', JSON.stringify(charactersToSave));
                 } catch (e) {
                     console.error('保存角色库失败:', e);
                 }
             }, 500), []);
 
             useEffect(() => {
-                debouncedSaveCharacters(characterLibrary);
-            }, [characterLibrary, debouncedSaveCharacters]);
-
-            // 当视频 URL 改变时清除错误提示
-            useEffect(() => {
-                setCreateCharacterVideoError(null);
-            }, [createCharacterVideoUrl, createCharacterSelectedTaskId, createCharacterVideoSourceType]);
+                debouncedSaveCharacters(seedanceCharacterLibrary);
+            }, [seedanceCharacterLibrary, debouncedSaveCharacters]);
 
             // localStorage 写入防抖函数
             const debouncedSaveHistory = useMemo(() => debounce((historyToSave) => {
@@ -3229,6 +3231,17 @@ You must design a visual composition that tells the story through **8 distinct p
                             nodeId: sourceNode.id,
                             name: sourceNode.audioFileName || '音频素材'
                         });
+                    } else if (sourceNode.type === 'seedance-asset' && sourceNode.settings?.assetId) {
+                        const assetTypeMap = { Image: 'image', Video: 'video', Audio: 'audio' };
+                        const assetType = assetTypeMap[sourceNode.settings.assetType] || 'image';
+                        targetAssets.push({
+                            type: assetType,
+                            url: `asset://${sourceNode.settings.assetId}`,
+                            nodeId: sourceNode.id,
+                            name: sourceNode.settings.assetName || sourceNode.settings.assetId || 'Seedance资产',
+                            isSeedanceAsset: true,
+                            assetId: sourceNode.settings.assetId
+                        });
                     }
                 });
 
@@ -4146,6 +4159,160 @@ You must design a visual composition that tells the story through **8 distinct p
             };
 
             // 获取 Blob 对象（兼容 HTTP URL 和 Blob URL）
+            // --- Volcengine Asset API 签名工具 ---
+            const hex = (buf) => Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+            const hmacSha256 = async (key, msg) => {
+                const cryptoKey = await crypto.subtle.importKey(
+                    'raw',
+                    typeof key === 'string' ? new TextEncoder().encode(key) : key,
+                    { name: 'HMAC', hash: 'SHA-256' },
+                    false,
+                    ['sign']
+                );
+                return await crypto.subtle.sign('HMAC', cryptoKey, new TextEncoder().encode(msg));
+            };
+            const hashSha256 = async (msg) => {
+                const buf = new TextEncoder().encode(msg);
+                return await crypto.subtle.digest('SHA-256', buf);
+            };
+            const signVolcengineRequest = async ({ method, uri, query, headers, payload, accessKey, secretKey, region, service }) => {
+                const now = new Date();
+                const dateStamp = now.toISOString().slice(0, 10).replace(/-/g, '');
+                const timeStamp = now.toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
+                const allHeaders = { ...headers, 'X-Date': timeStamp };
+                const canonicalHeaders = Object.entries(allHeaders)
+                    .sort(([a], [b]) => a.toLowerCase().localeCompare(b.toLowerCase()))
+                    .map(([k, v]) => `${k.toLowerCase()}:${String(v).trim()}`)
+                    .join('\n') + '\n';
+                const signedHeaders = Object.keys(allHeaders)
+                    .map(k => k.toLowerCase())
+                    .sort()
+                    .join(';');
+                const payloadHash = hex(await hashSha256(payload || ''));
+                const canonicalRequest = [
+                    method.toUpperCase(),
+                    uri,
+                    query || '',
+                    canonicalHeaders,
+                    signedHeaders,
+                    payloadHash
+                ].join('\n');
+                const credentialScope = `${dateStamp}/${region}/${service}/request`;
+                const stringToSign = `HMAC-SHA256\n${timeStamp}\n${credentialScope}\n${hex(await hashSha256(canonicalRequest))}`;
+                const kDate = await hmacSha256(`VOLCENGINE${secretKey}`, dateStamp);
+                const kRegion = await hmacSha256(kDate, region);
+                const kService = await hmacSha256(kRegion, service);
+                const kSigning = await hmacSha256(kService, 'request');
+                const signature = hex(await hmacSha256(kSigning, stringToSign));
+                const authorization = `HMAC-SHA256 Credential=${accessKey}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+                return { authorization, timeStamp };
+            };
+            const fetchAssetInfo = async (assetId, accessKey, secretKey) => {
+                const uri = '/open/GetAsset';
+                const payload = JSON.stringify({ Id: assetId });
+                const host = new URL(ASSET_API_BASE_URL).host;
+                const headers = {
+                    'Content-Type': 'application/json',
+                    'Host': host
+                };
+                const { authorization, timeStamp } = await signVolcengineRequest({
+                    method: 'POST',
+                    uri,
+                    query: '',
+                    headers,
+                    payload,
+                    accessKey,
+                    secretKey,
+                    region: ASSET_API_REGION,
+                    service: ASSET_API_SERVICE
+                });
+                const resp = await fetch(`${ASSET_API_BASE_URL}${uri}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Host': host,
+                        'X-Date': timeStamp,
+                        'Authorization': authorization
+                    },
+                    body: payload
+                });
+                const data = await resp.json().catch(async () => ({ error: await resp.text() }));
+                if (!resp.ok) {
+                    throw new Error(data?.error?.message || data?.error || `GetAsset 失败: ${resp.status}`);
+                }
+                const result = data?.Result || data?.result || data;
+                return {
+                    id: result?.Id || result?.id || assetId,
+                    url: result?.URL || result?.url,
+                    assetType: result?.AssetType || result?.assetType,
+                    status: result?.Status || result?.status,
+                    name: result?.Name || result?.name
+                };
+            };
+            const fetchCreateAssetGroup = async (name, description, accessKey, secretKey) => {
+                const uri = '/open/CreateAssetGroup';
+                const payload = JSON.stringify({ Name: name, Description: description || '', GroupType: 'AIGC' });
+                const host = new URL(ASSET_API_BASE_URL).host;
+                const headers = { 'Content-Type': 'application/json', 'Host': host };
+                const { authorization, timeStamp } = await signVolcengineRequest({ method: 'POST', uri, query: '', headers, payload, accessKey, secretKey, region: ASSET_API_REGION, service: ASSET_API_SERVICE });
+                const resp = await fetch(`${ASSET_API_BASE_URL}${uri}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Host': host, 'X-Date': timeStamp, 'Authorization': authorization }, body: payload });
+                const data = await resp.json().catch(async () => ({ error: await resp.text() }));
+                if (!resp.ok) throw new Error(data?.error?.message || data?.error || `CreateAssetGroup 失败: ${resp.status}`);
+                const result = data?.Result || data?.result || data;
+                return { id: result?.Id || result?.id };
+            };
+            const fetchCreateAsset = async (groupId, url, assetType, accessKey, secretKey) => {
+                const uri = '/open/CreateAsset';
+                const payload = JSON.stringify({ GroupId: groupId, URL: url, AssetType: assetType });
+                const host = new URL(ASSET_API_BASE_URL).host;
+                const headers = { 'Content-Type': 'application/json', 'Host': host };
+                const { authorization, timeStamp } = await signVolcengineRequest({ method: 'POST', uri, query: '', headers, payload, accessKey, secretKey, region: ASSET_API_REGION, service: ASSET_API_SERVICE });
+                const resp = await fetch(`${ASSET_API_BASE_URL}${uri}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Host': host, 'X-Date': timeStamp, 'Authorization': authorization }, body: payload });
+                const data = await resp.json().catch(async () => ({ error: await resp.text() }));
+                if (!resp.ok) throw new Error(data?.error?.message || data?.error || `CreateAsset 失败: ${resp.status}`);
+                const result = data?.Result || data?.result || data;
+                return { id: result?.Id || result?.id };
+            };
+            const fetchListAssetGroups = async (accessKey, secretKey) => {
+                const uri = '/open/ListAssetGroups';
+                const payload = JSON.stringify({ Filter: { GroupType: 'AIGC' }, PageNumber: 1, PageSize: 100 });
+                const host = new URL(ASSET_API_BASE_URL).host;
+                const headers = { 'Content-Type': 'application/json', 'Host': host };
+                const { authorization, timeStamp } = await signVolcengineRequest({ method: 'POST', uri, query: '', headers, payload, accessKey, secretKey, region: ASSET_API_REGION, service: ASSET_API_SERVICE });
+                const resp = await fetch(`${ASSET_API_BASE_URL}${uri}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Host': host, 'X-Date': timeStamp, 'Authorization': authorization }, body: payload });
+                const data = await resp.json().catch(async () => ({ error: await resp.text() }));
+                if (!resp.ok) throw new Error(data?.error?.message || data?.error || `ListAssetGroups 失败: ${resp.status}`);
+                const result = data?.Result || data?.result || data;
+                const items = result?.Items || result?.items || [];
+                return items.map(item => ({ id: item?.Id || item?.id, name: item?.Name || item?.name, description: item?.Description || item?.description }));
+            };
+            const fetchListAssets = async (groupIds, accessKey, secretKey) => {
+                const uri = '/open/ListAssets';
+                const payload = JSON.stringify({ Filter: { GroupIds: groupIds, GroupType: 'AIGC' }, PageNumber: 1, PageSize: 100 });
+                const host = new URL(ASSET_API_BASE_URL).host;
+                const headers = { 'Content-Type': 'application/json', 'Host': host };
+                const { authorization, timeStamp } = await signVolcengineRequest({ method: 'POST', uri, query: '', headers, payload, accessKey, secretKey, region: ASSET_API_REGION, service: ASSET_API_SERVICE });
+                const resp = await fetch(`${ASSET_API_BASE_URL}${uri}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Host': host, 'X-Date': timeStamp, 'Authorization': authorization }, body: payload });
+                const data = await resp.json().catch(async () => ({ error: await resp.text() }));
+                if (!resp.ok) throw new Error(data?.error?.message || data?.error || `ListAssets 失败: ${resp.status}`);
+                const result = data?.Result || data?.result || data;
+                const items = result?.Items || result?.items || [];
+                return items.map(item => ({ id: item?.Id || item?.id, name: item?.Name || item?.name, url: item?.URL || item?.url, assetType: item?.AssetType || item?.assetType, status: item?.Status || item?.status, groupId: item?.GroupId || item?.groupId }));
+            };
+            const fetchDeleteAsset = async (assetId, accessKey, secretKey) => {
+                const uri = '/open/DeleteAsset';
+                const payload = JSON.stringify({ Id: assetId });
+                const host = new URL(ASSET_API_BASE_URL).host;
+                const headers = { 'Content-Type': 'application/json', 'Host': host };
+                const { authorization, timeStamp } = await signVolcengineRequest({ method: 'POST', uri, query: '', headers, payload, accessKey, secretKey, region: ASSET_API_REGION, service: ASSET_API_SERVICE });
+                const resp = await fetch(`${ASSET_API_BASE_URL}${uri}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Host': host, 'X-Date': timeStamp, 'Authorization': authorization }, body: payload });
+                if (!resp.ok) {
+                    const data = await resp.json().catch(async () => ({ error: await resp.text() }));
+                    throw new Error(data?.error?.message || data?.error || `DeleteAsset 失败: ${resp.status}`);
+                }
+                return true;
+            };
+
             const getBlobFromUrl = async (url) => {
                 const res = await fetch(url);
                 return await res.blob();
@@ -6957,7 +7124,8 @@ You must design a visual composition that tells the story through **8 distinct p
                         for (const asset of referenceAssets) {
                             if (!asset?.url) continue;
                             let remoteUrl = asset.url;
-                            if (!remoteUrl.startsWith('http://') && !remoteUrl.startsWith('https://')) {
+                            // seedance-asset 节点直接使用 asset:// 协议，跳过上传转换
+                            if (!asset.isSeedanceAsset && !remoteUrl.startsWith('http://') && !remoteUrl.startsWith('https://')) {
                                 if (asset.type === 'image') {
                                     remoteUrl = await uploadImageToGetHttpUrl(asset.url);
                                 } else {
@@ -7659,8 +7827,8 @@ You must design a visual composition that tells the story through **8 distinct p
                             return obj;
                         };
                         const nodesWithDataUrls = await convertBlobUrlsToDataUrls(nodesToSave);
-                        const characterLibraryToSave = JSON.parse(JSON.stringify(characterLibrary, replacer));
-                        const characterLibraryWithDataUrls = await convertBlobUrlsToDataUrls(characterLibraryToSave);
+                        const seedanceCharacterLibraryToSave = JSON.parse(JSON.stringify(seedanceCharacterLibrary, replacer));
+                        const seedanceCharacterLibraryWithDataUrls = await convertBlobUrlsToDataUrls(seedanceCharacterLibraryToSave);
                         const projectData = {
                             version: '2.5.7',
                             projectName,
@@ -7669,7 +7837,7 @@ You must design a visual composition that tells the story through **8 distinct p
                             view,
                             history,
                             chatSessions,
-                            characterLibrary: characterLibraryWithDataUrls,
+                            seedanceCharacterLibrary: seedanceCharacterLibraryWithDataUrls,
                             timestamp: getCSTTimestamp()
                         };
                         const jsonStr = JSON.stringify(projectData, replacer, 2);
@@ -7879,24 +8047,24 @@ You must design a visual composition that tells the story through **8 distinct p
                     }
 
                     // 5. 写入角色库（流式处理）
-                    await writable.write(`  ],\n  "chatSessions": ${JSON.stringify(chatSessions, replacer, 2)},\n  "characterLibrary": [\n`);
-                    
-                    for (let i = 0; i < characterLibrary.length; i++) {
-                        const character = characterLibrary[i];
-                        const charToSave = await convertCharacterBlobUrls(character);
-                        
-                        const charJson = JSON.stringify(charToSave, replacer, 2);
-                        const indentedCharJson = i === 0 
-                            ? charJson.split('\n').join('\n    ')
-                            : '    ' + charJson.split('\n').join('\n    ');
-                        
-                        await writable.write(indentedCharJson);
-                        if (i < characterLibrary.length - 1) {
+                    await writable.write(`  ],\n  "chatSessions": ${JSON.stringify(chatSessions, replacer, 2)},\n  "seedanceCharacterLibrary": [\n`);
+
+                    for (let i = 0; i < seedanceCharacterLibrary.length; i++) {
+                        const group = seedanceCharacterLibrary[i];
+                        const groupToSave = await convertBlobUrlsToDataUrls(JSON.parse(JSON.stringify(group, replacer)));
+
+                        const groupJson = JSON.stringify(groupToSave, replacer, 2);
+                        const indentedGroupJson = i === 0
+                            ? groupJson.split('\n').join('\n    ')
+                            : '    ' + groupJson.split('\n').join('\n    ');
+
+                        await writable.write(indentedGroupJson);
+                        if (i < seedanceCharacterLibrary.length - 1) {
                             await writable.write(',\n');
                         } else {
                             await writable.write('\n');
                         }
-                        
+
                         // 注意：每次循环迭代都会创建新的作用域，变量会自动被 GC 回收
                     }
 
@@ -7929,8 +8097,8 @@ You must design a visual composition that tells the story through **8 distinct p
                     setProgressState({ visible: true, progress: 0, status: 'INITIALIZING...', type: 'import' });
 
                     const tempState = {
-                        nodes: [], history: [], connections: [], 
-                        chatSessions: [], characterLibrary: [], 
+                        nodes: [], history: [], connections: [],
+                        chatSessions: [], characterLibrary: [], seedanceCharacterLibrary: [],
                         projectName: '', view: null
                     };
                     
@@ -8006,6 +8174,7 @@ You must design a visual composition that tells the story through **8 distinct p
                                 if (trimmedLine.includes('"history": [')) { currentSection = 'history'; continue; }
                                 if (trimmedLine.includes('"connections": [')) { currentSection = 'connections'; continue; }
                                 if (trimmedLine.includes('"chatSessions": [')) { currentSection = 'chatSessions'; continue; }
+                                if (trimmedLine.includes('"seedanceCharacterLibrary": [')) { currentSection = 'seedanceCharacterLibrary'; continue; }
                                 if (trimmedLine.includes('"characterLibrary": [')) { currentSection = 'characterLibrary'; continue; }
                                 
                                 // 结束符检测
@@ -8059,6 +8228,8 @@ You must design a visual composition that tells the story through **8 distinct p
                                                 tempState.connections.push(item);
                                             } else if (currentSection === 'chatSessions') {
                                                 tempState.chatSessions.push(item);
+                                            } else if (currentSection === 'seedanceCharacterLibrary') {
+                                                tempState.seedanceCharacterLibrary.push(item);
                                             } else if (currentSection === 'characterLibrary') {
                                                 tempState.characterLibrary.push(item);
                                             }
@@ -8081,8 +8252,8 @@ You must design a visual composition that tells the story through **8 distinct p
                             if (tempState.view) setView(tempState.view);
                             if (tempState.connections.length > 0) setConnections(tempState.connections);
                             if (tempState.chatSessions.length > 0) setChatSessions(tempState.chatSessions);
-                            if (tempState.characterLibrary.length > 0) setCharacterLibrary(tempState.characterLibrary);
-                            
+                            if (tempState.seedanceCharacterLibrary.length > 0) setSeedanceCharacterLibrary(tempState.seedanceCharacterLibrary);
+
                             if (tempState.nodes.length > 0) setNodes(tempState.nodes);
                             if (tempState.history.length > 0) setHistory(tempState.history);
 
@@ -8105,6 +8276,8 @@ You must design a visual composition that tells the story through **8 distinct p
                     ? { w: 580, h: 320 }
                     : (type === 'gen-image' || type === 'rh-image')
                         ? { w: 360, h: 340 }
+                        : type === 'seedance-asset'
+                            ? { w: 280, h: 220 }
                         : type === 'audio-input'
                             ? { w: 320, h: 180 }
                         : type === 'video-input'
@@ -8135,6 +8308,8 @@ You must design a visual composition that tells the story through **8 distinct p
                             ? { model: 'rh-image-v2', ratio: '1:1', resolution: '2K', prompt: '', promptHtml: '' }
                         : type === 'gen-video'
                             ? { model: 'seedance-2.0-fast', duration: 5, ratio: '16:9', resolution: '480p', seed: -1, generateAudio: true, videoPrompt: '' }
+                        : type === 'seedance-asset'
+                            ? { assetId: '', assetType: 'Image', assetName: '', assetStatus: '', isFetching: false, fetchError: '' }
                             : type === 'audio-input'
                                 ? {}
                             : type === 'video-analyze'
@@ -8480,137 +8655,162 @@ You must design a visual composition that tells the story through **8 distinct p
             // 生成单个镜头
             // 重构后的生成单个镜头函数：原地生成，不依赖外部节点
             // 创建角色
-            const createCharacter = async (videoUrl, startSecond, endSecond, fromTaskId = null, customEndpoint = null) => {
+            // --- Seedance2.0 角色库（Asset Group）操作函数 ---
+            const handleGroupDrop = async (e, group) => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.currentTarget.classList.remove('drag-over');
+                const files = Array.from(e.dataTransfer.files);
+                const mediaFiles = files.filter(f => f.type.startsWith('image/') || f.type.startsWith('video/') || f.type.startsWith('audio/'));
+                if (!mediaFiles.length) return;
+                if (!assetApiKey || !assetApiSecret) {
+                    alert('请先在设置中配置 Asset API AK/SK');
+                    return;
+                }
+                for (const file of mediaFiles) {
+                    await uploadFileToAssetGroup(file, group);
+                }
+            };
+            const uploadFileToAssetGroup = async (file, group) => {
                 try {
-                    // 1. 获取配置
-                    const soraConfig = apiConfigs.find(c => c.type === 'Video' && (c.id === 'sora-2' || c.id === 'sora-2-pro'));
-                    if (!soraConfig) {
-                        alert('未找到 Sora 2 模型配置，请先在设置中配置 Sora 2 或 Sora 2 Pro');
-                        setCreateCharacterSubmitting(false);
-                        return;
-                    }
-                    
-                    const apiKey = soraConfig.key || globalApiKey;
-                    
-                    if (!apiKey) {
-                        alert('请先配置 API Key');
-                        setCreateCharacterSubmitting(false);
-                        return;
-                    }
-                    
-                    // 验证时间范围
-                    if (endSecond - startSecond < 1 || endSecond - startSecond > 3) {
-                        alert('时间范围必须在 1-3 秒之间');
-                        setCreateCharacterSubmitting(false);
-                        return;
-                    }
-                    
-                    // 2. 使用用户提供的 endpoint 或自动构造
-                    const timestamps = `${startSecond},${endSecond}`;
-                    let endpoint;
-                    if (customEndpoint && customEndpoint.trim()) {
-                        endpoint = customEndpoint.trim();
-                    } else {
-                        // 如果没有提供，使用默认路径
-                        const baseUrl = (soraConfig.url || DEFAULT_BASE_URL).replace(/\/+$/, '');
-                        endpoint = `${baseUrl}/sora/v1/characters`;
-                    }
-                    
-                    // 3. 构造 Body
-                    const payload = fromTaskId 
-                        ? { from_task: fromTaskId, timestamps }
-                        : { url: videoUrl, timestamps };
-                    
-                    // 4. 详细调试日志
-                    console.log('[Create Character] Request Details:', {
-                        endpoint,
-                        apiKey: apiKey ? `${apiKey.substring(0, 8)}...${apiKey.substring(apiKey.length - 4)}` : 'EMPTY',
-                        payload,
-                        fromTaskId,
-                        videoUrl: fromTaskId ? 'N/A (using from_task)' : videoUrl,
-                        customEndpoint: customEndpoint || 'N/A (using default)'
-                    });
-                    
-                    // 5. 发送请求
-                    const resp = await fetch(endpoint, {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${apiKey}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify(payload)
-                    });
-                    
-                    // 6. 错误处理
-                    if (!resp.ok) {
-                        const errText = await resp.text();
-                        console.error('[Create Character] API Error:', {
-                            status: resp.status,
-                            statusText: resp.statusText,
-                            errorText: errText,
-                            endpoint
-                        });
-                        
-                        // 尝试解析错误响应
-                        let errorData = null;
-                        try {
-                            errorData = JSON.parse(errText);
-                        } catch (e) {
-                            // 如果不是 JSON，使用原始文本
-                        }
-                        
-                        // 特殊处理 500 错误和 get_origin_task_failed
-                        if (resp.status === 500 || (errorData && (errorData.code === 'get_origin_task_failed' || errorData.message?.includes('get_origin_task_failed')))) {
-                            throw new Error('TASK_NOT_FOUND');
-                        }
-                        
-                        throw new Error(`API错误 (${resp.status}): ${errText || resp.statusText}`);
-                    }
-                    
-                    const data = await resp.json();
-                    console.log('[Create Character] Success:', data);
-                    
-                    // 7. 保存到角色库
-                    if (data.id && data.username) {
-                        const newCharacter = {
-                            id: data.id,
-                            username: data.username,
-                            profile_picture_url: data.profile_picture_url || '',
-                            permalink: data.permalink || ''
-                        };
-                        
-                        const updated = [...characterLibrary, newCharacter];
-                        setCharacterLibrary(updated);
-                        alert(`角色 "${data.username}" 创建成功！`);
-                        setCreateCharacterOpen(false);
-                        // 重置表单
-                        setCreateCharacterVideoSourceType('url');
-                        setCreateCharacterVideoUrl('');
-                        setCreateCharacterSelectedTaskId('');
-                        setCreateCharacterStartSecond(1);
-                        setCreateCharacterEndSecond(3);
-                        setCreateCharacterEndpoint('');
-                    } else {
-                        throw new Error('返回数据缺少 id 或 username');
-                    }
+                    const assetType = file.type.startsWith('image/') ? 'Image' : file.type.startsWith('video/') ? 'Video' : 'Audio';
+                    const remoteUrl = await uploadBlobToTempHosting(file, file.name || 'asset.bin');
+                    const { id: assetId } = await fetchCreateAsset(group.id, remoteUrl, assetType, assetApiKey, assetApiSecret);
+                    const pendingAsset = {
+                        id: assetId,
+                        name: file.name || assetId,
+                        url: remoteUrl,
+                        assetType,
+                        status: 'Processing',
+                        groupId: group.id
+                    };
+                    setSeedanceCharacterLibrary(prev => prev.map(g => g.id === group.id ? { ...g, assets: [...g.assets, pendingAsset] } : g));
+                    pollAssetStatus(assetId, group.id);
                 } catch (err) {
-                    console.error('[Create Character] Failed:', err);
-                    let msg = err.message;
-                    
-                    // 特殊处理：原任务已过期或无法访问
-                    if (msg === 'TASK_NOT_FOUND') {
-                        alert('创建失败：原任务已过期或无法访问。\n\n请尝试获取该视频的下载链接，使用"输入视频 URL"方式重新创建。');
+                    alert(`上传失败: ${err.message}`);
+                }
+            };
+            const pollAssetStatus = async (assetId, groupId) => {
+                const maxAttempts = 200;
+                for (let i = 0; i < maxAttempts; i++) {
+                    await new Promise(r => setTimeout(r, 3000));
+                    try {
+                        const info = await fetchAssetInfo(assetId, assetApiKey, assetApiSecret);
+                        if (info.status === 'Active' || info.status === 'Failed') {
+                            setSeedanceCharacterLibrary(prev => prev.map(g => {
+                                if (g.id !== groupId) return g;
+                                return {
+                                    ...g,
+                                    assets: g.assets.map(a => a.id === assetId ? {
+                                        ...a,
+                                        status: info.status,
+                                        url: info.url || a.url,
+                                        name: info.name || a.name,
+                                        assetType: info.assetType || a.assetType
+                                    } : a)
+                                };
+                            }));
+                            return;
+                        }
+                    } catch (e) {
+                        // ignore poll errors
+                    }
+                }
+                setSeedanceCharacterLibrary(prev => prev.map(g => {
+                    if (g.id !== groupId) return g;
+                    return { ...g, assets: g.assets.map(a => a.id === assetId ? { ...a, status: 'Failed' } : a) };
+                }));
+            };
+            const spawnSeedanceAssetNode = (asset) => {
+                const rect = canvasRef.current.getBoundingClientRect();
+                const worldX = (rect.width / 2 - view.x) / view.zoom;
+                const worldY = (rect.height / 2 - view.y) / view.zoom;
+                const nodeId = addNode('seedance-asset', worldX, worldY);
+                updateNodeSettings(nodeId, {
+                    assetId: asset.id,
+                    assetType: asset.assetType,
+                    assetName: asset.name,
+                    assetStatus: asset.status
+                });
+            };
+            const deleteGroup = (groupId) => {
+                if (!confirm('确定要删除该组及其所有本地素材记录吗？（不会删除云端素材）')) return;
+                setSeedanceCharacterLibrary(prev => prev.filter(g => g.id !== groupId));
+            };
+            const deleteAsset = async (groupId, assetId) => {
+                const shouldDeleteCloud = confirm('同时删除云端素材吗？\n确定：删除云端+本地\n取消：仅删除本地记录');
+                if (shouldDeleteCloud && assetApiKey && assetApiSecret) {
+                    try {
+                        await fetchDeleteAsset(assetId, assetApiKey, assetApiSecret);
+                    } catch (err) {
+                        alert(`云端删除失败: ${err.message}`);
+                    }
+                }
+                setSeedanceCharacterLibrary(prev => prev.map(g => {
+                    if (g.id !== groupId) return g;
+                    return { ...g, assets: g.assets.filter(a => a.id !== assetId) };
+                }));
+            };
+            const pullCloudGroup = async (groupId) => {
+                if (!assetApiKey || !assetApiSecret) {
+                    alert('请先在设置中配置 Asset API AK/SK');
+                    return;
+                }
+                setPullCloudSubmitting(true);
+                try {
+                    const assets = await fetchListAssets([groupId], assetApiKey, assetApiSecret);
+                    if (!assets.length) {
+                        alert('该 Group ID 下未找到任何素材');
                         return;
                     }
-                    
-                    // 处理网络错误
-                    if (msg.includes('Failed to fetch') || err.name === 'TypeError' || err.message.includes('NetworkError')) {
-                        msg = '连接失败。可能原因：\n\n1. API 地址填写错误\n   - 请检查 API 接口地址是否多余了 "/sora" 前缀\n   - 有些服务商的路径可能不同，请询问服务商 Sora 角色创建接口的准确路径\n\n2. 跨域限制 (CORS)\n   - 请尝试安装 Allow CORS 浏览器插件\n\n3. 网络问题\n   - 请检查网络连接';
-                    }
-                    
-                    alert(`创建角色失败: ${msg}`);
+                    setSeedanceCharacterLibrary(prev => {
+                        const existing = prev.find(g => g.id === groupId);
+                        const baseGroup = existing || { id: groupId, name: `云端组 ${groupId.slice(-8)}`, description: '', assets: [] };
+                        const assetMap = new Map(baseGroup.assets.map(a => [a.id, a]));
+                        assets.forEach(a => {
+                            assetMap.set(a.id, { id: a.id, name: a.name || a.id, url: a.url || '', assetType: a.assetType || 'Image', status: a.status || 'Active', groupId });
+                        });
+                        const mergedGroup = { ...baseGroup, assets: Array.from(assetMap.values()) };
+                        if (existing) {
+                            return prev.map(g => g.id === groupId ? mergedGroup : g);
+                        }
+                        return [...prev, mergedGroup];
+                    });
+                    alert(`成功拉取 ${assets.length} 个素材`);
+                    setPullCloudOpen(false);
+                    setPullCloudId('');
+                } catch (err) {
+                    alert(`拉取失败: ${err.message}`);
                 } finally {
-                    setCreateCharacterSubmitting(false);
+                    setPullCloudSubmitting(false);
+                }
+            };
+            const pullCloudAsset = async (assetId) => {
+                if (!assetApiKey || !assetApiSecret) {
+                    alert('请先在设置中配置 Asset API AK/SK');
+                    return;
+                }
+                setPullCloudSubmitting(true);
+                try {
+                    const info = await fetchAssetInfo(assetId, assetApiKey, assetApiSecret);
+                    const groupId = info.groupId || info.GroupId || 'unknown-group';
+                    setSeedanceCharacterLibrary(prev => {
+                        const existing = prev.find(g => g.id === groupId);
+                        const baseGroup = existing || { id: groupId, name: `云端组 ${String(groupId).slice(-8)}`, description: '', assets: [] };
+                        const asset = { id: info.id, name: info.name || info.id, url: info.url || '', assetType: info.assetType || 'Image', status: info.status || 'Active', groupId };
+                        const hasAsset = baseGroup.assets.some(a => a.id === asset.id);
+                        const mergedAssets = hasAsset ? baseGroup.assets.map(a => a.id === asset.id ? asset : a) : [...baseGroup.assets, asset];
+                        const mergedGroup = { ...baseGroup, assets: mergedAssets };
+                        if (existing) return prev.map(g => g.id === groupId ? mergedGroup : g);
+                        return [...prev, mergedGroup];
+                    });
+                    alert(`成功拉取素材: ${info.name || info.id}`);
+                    setPullCloudOpen(false);
+                    setPullCloudId('');
+                } catch (err) {
+                    alert(`拉取失败: ${err.message}`);
+                } finally {
+                    setPullCloudSubmitting(false);
                 }
             };
 
@@ -11100,22 +11300,34 @@ You must design a visual composition that tells the story through **8 distinct p
                                     <Music size={28} className={theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'} />
                                 </div>
                             )}
-                            {!node.content && (
+                            {node.type === 'seedance-asset' && (
+                                <div className="w-full h-full flex items-center justify-center">
+                                    {node.settings?.assetType === 'Video' ? (
+                                        <Video size={28} className={theme === 'dark' ? 'text-purple-400' : 'text-purple-500'} />
+                                    ) : node.settings?.assetType === 'Audio' ? (
+                                        <Music size={28} className={theme === 'dark' ? 'text-amber-400' : 'text-amber-500'} />
+                                    ) : (
+                                        <FileImage size={28} className={theme === 'dark' ? 'text-emerald-400' : 'text-emerald-500'} />
+                                    )}
+                                </div>
+                            )}
+                            {!node.content && node.type !== 'seedance-asset' && (
                                 <div className={`p-2 font-bold text-sm truncate ${theme === 'dark' ? 'text-zinc-300' : 'text-zinc-700'}`}>
-                                    {node.type === 'input-image' ? '图片' : 
-                                     node.type === 'video-input' ? '视频' : 
+                                    {node.type === 'input-image' ? '图片' :
+                                     node.type === 'video-input' ? '视频' :
                                      node.type === 'audio-input' ? '音频' :
                                      node.type === 'gen-image' ? 'seedream图像生成' :
                                      node.type === 'rh-image' ? 'RH 全能图片' :
-                                     node.type === 'gen-video' ? 'seedance2.0视频生成' : 
-                                     node.type === 'text-node' ? '文字' : 
-                                     node.type === 'preview' ? '预览' : 
+                                     node.type === 'gen-video' ? 'seedance2.0视频生成' :
+                                     node.type === 'seedance-asset' ? 'seedance2.0资产导入' :
+                                     node.type === 'text-node' ? '文字' :
+                                     node.type === 'preview' ? '预览' :
                                      node.type || '节点'}
                                 </div>
                             )}
                             
                             {/* 保留连接点占位符，确保连线位置正确（简化样式） */}
-                            {node.type !== 'input-image' && node.type !== 'video-input' && node.type !== 'audio-input' && node.type !== 'video-analyze' && node.type !== 'preview' && (
+                            {node.type !== 'input-image' && node.type !== 'video-input' && node.type !== 'audio-input' && node.type !== 'seedance-asset' && node.type !== 'video-analyze' && node.type !== 'preview' && (
                                 node.type === 'image-compare' ? (
                                     <>
                                         <div 
@@ -11816,6 +12028,111 @@ You must design a visual composition that tells the story through **8 distinct p
                                             >
                                                 输入 URL
                                             </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {node.type === 'seedance-asset' && (
+                                <div className={`relative w-full h-full flex flex-col ${theme === 'dark' ? 'bg-zinc-900/80' : 'bg-zinc-100'}`}>
+                                    <div className="flex items-center justify-between px-3 py-2 border-b text-xs font-semibold">
+                                        <div className="flex items-center gap-1.5">
+                                            {node.settings?.assetType === 'Video' ? <Video size={13} className="text-purple-400" /> :
+                                             node.settings?.assetType === 'Audio' ? <Music size={13} className="text-amber-400" /> :
+                                             <FileImage size={13} className="text-emerald-400" />}
+                                            <span>Seedance 资产</span>
+                                        </div>
+                                        <div className="text-[10px] truncate max-w-[100px]">
+                                            {node.settings?.assetStatus ? (
+                                                <span className={
+                                                    node.settings.assetStatus === 'Active' ? 'text-emerald-500' :
+                                                    node.settings.assetStatus === 'Failed' ? 'text-red-500' :
+                                                    'text-amber-500'
+                                                }>{node.settings.assetStatus}</span>
+                                            ) : (
+                                                <span className="text-zinc-500">未拉取</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="flex-1 p-3 flex flex-col gap-2 pointer-events-auto">
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                value={node.settings?.assetId || ''}
+                                                placeholder="Asset ID"
+                                                className={`flex-1 min-w-0 px-2 py-1 rounded text-[11px] border ${
+                                                    theme === 'dark'
+                                                        ? 'bg-zinc-800 border-zinc-700 text-zinc-200 placeholder-zinc-600'
+                                                        : 'bg-white border-zinc-300 text-zinc-800 placeholder-zinc-400'
+                                                }`}
+                                                onMouseDown={(e) => e.stopPropagation()}
+                                                onChange={(e) => updateNodeSettings(node.id, { assetId: e.target.value })}
+                                            />
+                                            <select
+                                                value={node.settings?.assetType || 'Image'}
+                                                className={`px-2 py-1 rounded text-[11px] border ${
+                                                    theme === 'dark'
+                                                        ? 'bg-zinc-800 border-zinc-700 text-zinc-200'
+                                                        : 'bg-white border-zinc-300 text-zinc-800'
+                                                }`}
+                                                onMouseDown={(e) => e.stopPropagation()}
+                                                onChange={(e) => updateNodeSettings(node.id, { assetType: e.target.value })}
+                                            >
+                                                <option value="Image">图片</option>
+                                                <option value="Video">视频</option>
+                                                <option value="Audio">音频</option>
+                                            </select>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                disabled={node.settings?.isFetching || !node.settings?.assetId || !assetApiKey || !assetApiSecret}
+                                                className={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${
+                                                    node.settings?.isFetching || !node.settings?.assetId || !assetApiKey || !assetApiSecret
+                                                        ? 'bg-zinc-700 text-zinc-500 cursor-not-allowed'
+                                                        : 'bg-blue-600 hover:bg-blue-500 text-white'
+                                                }`}
+                                                onMouseDown={(e) => e.stopPropagation()}
+                                                onClick={async () => {
+                                                    const id = node.settings?.assetId?.trim();
+                                                    if (!id) return;
+                                                    updateNodeSettings(node.id, { isFetching: true, fetchError: '' });
+                                                    try {
+                                                        const info = await fetchAssetInfo(id, assetApiKey, assetApiSecret);
+                                                        updateNodeSettings(node.id, {
+                                                            assetType: info.assetType || 'Image',
+                                                            assetName: info.name || '',
+                                                            assetStatus: info.status || '',
+                                                            isFetching: false,
+                                                            fetchError: ''
+                                                        });
+                                                    } catch (err) {
+                                                        updateNodeSettings(node.id, {
+                                                            isFetching: false,
+                                                            fetchError: err.message || '拉取失败'
+                                                        });
+                                                    }
+                                                }}
+                                            >
+                                                {node.settings?.isFetching ? '拉取中...' : '拉取'}
+                                            </button>
+                                            {!assetApiKey || !assetApiSecret ? (
+                                                <span className="text-[10px] text-zinc-500">需配置 Asset API AK/SK</span>
+                                            ) : node.settings?.fetchError ? (
+                                                <span className="text-[10px] text-red-500 truncate max-w-[120px]" title={node.settings.fetchError}>{node.settings.fetchError}</span>
+                                            ) : node.settings?.assetName ? (
+                                                <span className="text-[10px] text-zinc-400 truncate max-w-[120px]">{node.settings.assetName}</span>
+                                            ) : null}
+                                        </div>
+                                        <div className={`flex-1 rounded-lg border border-dashed flex items-center justify-center ${
+                                            theme === 'dark' ? 'border-zinc-700' : 'border-zinc-300'
+                                        }`}>
+                                            {node.settings?.assetType === 'Video' ? (
+                                                <Video size={32} className={theme === 'dark' ? 'text-purple-400/60' : 'text-purple-500/60'} />
+                                            ) : node.settings?.assetType === 'Audio' ? (
+                                                <Music size={32} className={theme === 'dark' ? 'text-amber-400/60' : 'text-amber-500/60'} />
+                                            ) : (
+                                                <FileImage size={32} className={theme === 'dark' ? 'text-emerald-400/60' : 'text-emerald-500/60'} />
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -12700,117 +13017,10 @@ You must design a visual composition that tells the story through **8 distinct p
                                                                         transition: 'all 0.2s ease-in-out'
                                                                     }}
                                                                 />
-                                                                {(shot.model === 'sora-2' || shot.model === 'sora-2-pro') && characterLibrary.length > 0 && (
-                                                                    <button
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            setCharactersOpen(true);
-                                                                        }}
-                                                                        className={`absolute top-2 right-2 p-1 rounded transition-colors ${
-                                                                            theme === 'dark'
-                                                                                ? 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800'
-                                                                                : 'text-zinc-400 hover:text-zinc-700 hover:bg-zinc-200'
-                                                                        }`}
-                                                                        title="插入角色"
-                                                                    >
-                                                                        <Users size={12} />
-                                                                    </button>
-                                                                )}
+                                                                {null}
                                                             </div>
                                                             
-                                                            {/* 角色引用栏 (仅 Sora 模型) */}
-                                                            {(() => {
-                                                                const currentModel = shot.model || '';
-                                                                const isSora = currentModel && (currentModel.includes('sora') || currentModel === 'sora-2' || currentModel === 'sora-2-pro');
-                                                                
-                                                                if (!isSora || characterLibrary.length === 0) return null;
-                                                                
-                                                                const currentPrompt = shot.prompt || '';
-                                                                const expandKey = `${node.id}-${shot.id}`;
-                                                                const isExpanded = characterReferenceBarExpanded[expandKey] || false;
-                                                                const maxVisible = 5; // 最多显示5个角色，超过则显示展开按钮
-                                                                const shouldShowExpand = characterLibrary.length > maxVisible;
-                                                                
-                                                                return (
-                                                                    <div className="border-t border-dashed mt-1" style={{
-                                                                        borderColor: theme === 'dark' ? 'rgba(63, 63, 70, 0.5)' : 'rgba(161, 161, 170, 0.5)'
-                                                                    }}>
-                                                                        <div className="flex items-center justify-between py-1 px-1">
-                                                                            <div className="flex gap-2 overflow-x-auto py-2 flex-1 custom-scrollbar">
-                                                                                {(isExpanded ? characterLibrary : characterLibrary.slice(0, maxVisible)).map(char => {
-                                                                            const tag = `@${char.username}`;
-                                                                            const isActive = currentPrompt.includes(tag);
-                                                                            
-                                                                            return (
-                                                                                <button
-                                                                                    key={char.id}
-                                                                                    onClick={(e) => {
-                                                                                        e.stopPropagation();
-                                                                                        let newPrompt = currentPrompt || '';
-                                                                                        if (isActive) {
-                                                                                            // 移除标签，并清理多余空格
-                                                                                            newPrompt = newPrompt.replace(tag, '').replace(/\s{2,}/g, ' ').trim();
-                                                                                        } else {
-                                                                                            // 添加标签到末尾（前后加空格）
-                                                                                            newPrompt = newPrompt.trim();
-                                                                                            newPrompt = newPrompt ? `${newPrompt} ${tag} ` : `${tag} `;
-                                                                                        }
-                                                                                        updateShot(node.id, shot.id, { prompt: newPrompt });
-                                                                                    }}
-                                                                                    className={`relative shrink-0 transition-all ${isActive ? 'scale-110' : 'opacity-70 hover:opacity-100'}`}
-                                                                                    title={char.username}
-                                                                                >
-                                                                                    <img 
-                                                                                        src={char.profile_picture_url || ''} 
-                                                                                        alt={char.username}
-                                                                                        className={`w-8 h-8 rounded-full object-cover border-2 ${
-                                                                                            isActive 
-                                                                                                ? 'border-blue-500 ring-2 ring-blue-500' 
-                                                                                                : 'border-transparent'
-                                                                                        }`}
-                                                                                        onError={(e) => {
-                                                                                            e.target.style.display = 'none';
-                                                                                        }}
-                                                                                    />
-                                                                                    {/* 右下角显示小的链接图标表示可用 */}
-                                                                                    <div className="absolute -bottom-0.5 -right-0.5 bg-black/50 rounded-full p-0.5">
-                                                                                        <LinkIcon size={8} className="text-green-400" />
-                                                                                    </div>
-                                                                                </button>
-                                                                            );
-                                                                        })}
-                                                                            </div>
-                                                                            {shouldShowExpand && (
-                                                                                <button
-                                                                                    onClick={(e) => {
-                                                                                        e.stopPropagation();
-                                                                                        if (isExpanded) {
-                                                                                            // 收起：关闭展开状态
-                                                                                            setCharacterReferenceBarExpanded(prev => {
-                                                                                                const updated = { ...prev };
-                                                                                                delete updated[expandKey];
-                                                                                                return updated;
-                                                                                            });
-                                                                                        } else {
-                                                                                            // 展开：打开角色库侧边栏
-                                                                                            setCharactersOpen(true);
-                                                                                            setCharacterReferenceBarExpanded(prev => ({ ...prev, [expandKey]: true }));
-                                                                                        }
-                                                                                    }}
-                                                                                    className={`shrink-0 px-2 py-1 text-[10px] rounded transition-colors ml-2 ${
-                                                                                        theme === 'dark'
-                                                                                            ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
-                                                                                            : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
-                                                                                    }`}
-                                                                                    title={isExpanded ? "收起" : "打开角色库"}
-                                                                                >
-                                                                                    {isExpanded ? '收起' : `+${characterLibrary.length - maxVisible}`}
-                                                                                </button>
-                                                                            )}
-                                                                        </div>
-                                                                    </div>
-                                                                );
-                                                            })()}
+                                                            {null}
                                                             
                                                             <div className="flex gap-1 flex-wrap items-center mt-1">
                                                                 {shot.tags?.map((tag, tagIdx) => (
@@ -13304,7 +13514,15 @@ You must design a visual composition that tells the story through **8 distinct p
                                                                 }}
                                                                 title={(node.type === 'gen-video' || isImageGenerationNode) ? `点击插入素材编号 ${asset.token}` : ''}
                                                             >
-                                                                {asset.type === 'image' ? (
+                                                                {asset.isSeedanceAsset ? (
+                                                                    asset.type === 'image' ? (
+                                                                        <div className="w-full h-full flex items-center justify-center bg-zinc-800 text-emerald-400"><FileImage size={14} /></div>
+                                                                    ) : asset.type === 'video' ? (
+                                                                        <div className="w-full h-full flex items-center justify-center bg-zinc-800 text-purple-400"><Video size={14} /></div>
+                                                                    ) : (
+                                                                        <div className="w-full h-full flex items-center justify-center bg-zinc-800 text-amber-400"><Music size={14} /></div>
+                                                                    )
+                                                                ) : asset.type === 'image' ? (
                                                                     <img src={asset.url} className="w-full h-full object-cover" />
                                                                 ) : asset.type === 'video' ? (
                                                                     <video src={asset.url} className="w-full h-full object-cover" muted playsInline />
@@ -13470,121 +13688,11 @@ You must design a visual composition that tells the story through **8 distinct p
                                                 onMouseDown={(e) => e.stopPropagation()}
                                             />
                                         )}
-                                            {(node.type === 'gen-video' && (node.settings?.model === 'sora-2' || node.settings?.model === 'sora-2-pro')) && characterLibrary.length > 0 && (
-                                                <div className="relative shrink-0">
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setCharactersOpen(true);
-                                                        }}
-                                                        className={`p-1.5 rounded transition-colors ${
-                                                            theme === 'dark'
-                                                                ? 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
-                                                                : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-200'
-                                                        }`}
-                                                        title="插入角色"
-                                                    >
-                                                        <Users size={14} />
-                                                    </button>
-                                                </div>
-                                            )}
+                                            {null}
                                         </div>
                                     </div>
                                     
-                                    {/* 角色引用栏 (仅 Sora 模型) */}
-                                    {node.type === 'gen-video' && (() => {
-                                        const currentModel = node.settings?.model || '';
-                                        const modelConfig = apiConfigsMap.get(currentModel);
-                                        const modelName = modelConfig?.modelName || modelConfig?.id || currentModel;
-                                        const isSora = modelName && (modelName.includes('sora') || currentModel.includes('sora'));
-                                        
-                                        if (!isSora || characterLibrary.length === 0) return null;
-                                        
-                                        const currentPrompt = node.settings?.videoPrompt || '';
-                                        const isExpanded = characterReferenceBarExpanded[node.id] || false;
-                                        const maxVisible = 5; // 最多显示5个角色，超过则显示展开按钮
-                                        const shouldShowExpand = characterLibrary.length > maxVisible;
-                                        
-                                        return (
-                                            <div className="border-t border-dashed mt-1" style={{
-                                                borderColor: theme === 'dark' ? 'rgba(63, 63, 70, 0.5)' : 'rgba(161, 161, 170, 0.5)'
-                                            }}>
-                                                <div className="flex items-center justify-between py-1 px-1">
-                                                    <div className="flex gap-2 overflow-x-auto py-2 flex-1 custom-scrollbar">
-                                                        {(isExpanded ? characterLibrary : characterLibrary.slice(0, maxVisible)).map(char => {
-                                                    const tag = `@${char.username}`;
-                                                    const isActive = currentPrompt.includes(tag);
-                                                    
-                                                    return (
-                                                        <button
-                                                            key={char.id}
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                let newPrompt = currentPrompt || '';
-                                                                if (isActive) {
-                                                                    // 移除标签，并清理多余空格
-                                                                    newPrompt = newPrompt.replace(tag, '').replace(/\s{2,}/g, ' ').trim();
-                                                                } else {
-                                                                    // 添加标签到末尾（前后加空格）
-                                                                    newPrompt = newPrompt.trim();
-                                                                    newPrompt = newPrompt ? `${newPrompt} ${tag} ` : `${tag} `;
-                                                                }
-                                                                updateNodeSettings(node.id, { videoPrompt: newPrompt });
-                                                            }}
-                                                            className={`relative shrink-0 transition-all ${isActive ? 'scale-110' : 'opacity-70 hover:opacity-100'}`}
-                                                            title={char.username}
-                                                        >
-                                                            <img 
-                                                                src={char.profile_picture_url || ''} 
-                                                                alt={char.username}
-                                                                className={`w-8 h-8 rounded-full object-cover border-2 ${
-                                                                    isActive 
-                                                                        ? 'border-blue-500 ring-2 ring-blue-500' 
-                                                                        : 'border-transparent'
-                                                                }`}
-                                                                onError={(e) => {
-                                                                    e.target.style.display = 'none';
-                                                                }}
-                                                            />
-                                                            {/* 右下角显示小的链接图标表示可用 */}
-                                                            <div className="absolute -bottom-0.5 -right-0.5 bg-black/50 rounded-full p-0.5">
-                                                                <LinkIcon size={8} className="text-green-400" />
-                                                            </div>
-                                                        </button>
-                                                    );
-                                                        })}
-                                                    </div>
-                                                    {shouldShowExpand && (
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                if (isExpanded) {
-                                                                    // 收起：关闭展开状态
-                                                                    setCharacterReferenceBarExpanded(prev => {
-                                                                        const updated = { ...prev };
-                                                                        delete updated[node.id];
-                                                                        return updated;
-                                                                    });
-                                                                } else {
-                                                                    // 展开：打开角色库侧边栏
-                                                                    setCharactersOpen(true);
-                                                                    setCharacterReferenceBarExpanded(prev => ({ ...prev, [node.id]: true }));
-                                                                }
-                                                            }}
-                                                            className={`shrink-0 px-2 py-1 text-[10px] rounded transition-colors ml-2 ${
-                                                                theme === 'dark'
-                                                                    ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
-                                                                    : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
-                                                            }`}
-                                                            title={isExpanded ? "收起" : "打开角色库"}
-                                                        >
-                                                            {isExpanded ? '收起' : `+${characterLibrary.length - maxVisible}`}
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        );
-                                    })()}
+                                    {null}
                                     
                                     {/* Midjourney指令UI: oref, ow, sref */}
                                     {node.type === 'gen-image' && (() => {
@@ -14129,7 +14237,7 @@ You must design a visual composition that tells the story through **8 distinct p
                         </div>
                     </div>
                 );
-            }, [selectedNodeId, selectedNodeIds, hoverTargetId, nodeConnectedStatus, adjacentNodesCache, apiConfigsMap, getConnectedInputImages, getConnectedReferenceAssets, theme, view, dragNodeId, connectingSource, connectingTarget, connectingInputType, deleteNode, handleNodeMouseUp, screenToWorld, setDragNodeId, setSelectedNodeId, setSelectedNodeIds, setActiveDropdown, setHoverTargetId, setConnectingSource, setConnectingTarget, setConnectingInputType, setResizingNodeId, setLightboxItem, isVideoUrl, updateNodeSettings, getConnectedTextNodes, startGeneration, getDefaultDurationForModel, getDefaultDurationsForModel, getConnectedGenNodes, getConnectedVideoInputNode, getConnectedVideoAnalyzeNode, activeDropdown, videoMentionSelectedIndex, imageMentionSelectedIndex, openVideoMentionPopup, closeVideoMentionPopup, insertVideoMentionToken, openImageMentionPopup, closeImageMentionPopup, insertImageMentionToken, formatVideoPromptMentions, formatImagePromptMentions, normalizeVideoPromptState, normalizeImagePromptState, syncVideoPromptFromEditor, syncImagePromptFromEditor, saveVideoPromptSelection, saveImagePromptSelection, serializeVideoPromptNode, serializeImagePromptNode]);
+            }, [selectedNodeId, selectedNodeIds, hoverTargetId, nodeConnectedStatus, adjacentNodesCache, apiConfigsMap, getConnectedInputImages, getConnectedReferenceAssets, theme, view, dragNodeId, connectingSource, connectingTarget, connectingInputType, deleteNode, handleNodeMouseUp, screenToWorld, setDragNodeId, setSelectedNodeId, setSelectedNodeIds, setActiveDropdown, setHoverTargetId, setConnectingSource, setConnectingTarget, setConnectingInputType, setResizingNodeId, setLightboxItem, isVideoUrl, updateNodeSettings, getConnectedTextNodes, startGeneration, getDefaultDurationForModel, getDefaultDurationsForModel, getConnectedGenNodes, getConnectedVideoInputNode, getConnectedVideoAnalyzeNode, activeDropdown, videoMentionSelectedIndex, imageMentionSelectedIndex, openVideoMentionPopup, closeVideoMentionPopup, insertVideoMentionToken, openImageMentionPopup, closeImageMentionPopup, insertImageMentionToken, formatVideoPromptMentions, formatImagePromptMentions, normalizeVideoPromptState, normalizeImagePromptState, syncVideoPromptFromEditor, syncImagePromptFromEditor, saveVideoPromptSelection, saveImagePromptSelection, serializeVideoPromptNode, serializeImagePromptNode, assetApiKey, assetApiSecret]);
 
             // 高性能模式：当节点数量超过 50 时自动启用
             const isPerfMode = nodes.length > 50;
@@ -14527,29 +14635,28 @@ You must design a visual composition that tells the story through **8 distinct p
                                             theme === 'dark' ? 'text-zinc-300' : 'text-zinc-700'
                                         }`}
                                     >
-                                        Sora 角色库
+                                        Seedance2.0 角色库
                                     </h3>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-1.5">
                                         <button
-                                            onClick={() => {
-                                                // 自动计算默认 endpoint
-                                                const soraConfig = apiConfigs.find(c => c.type === 'Video' && (c.id === 'sora-2' || c.id === 'sora-2-pro'));
-                                                if (soraConfig) {
-                                                    const baseUrl = (soraConfig.url || DEFAULT_BASE_URL).replace(/\/+$/, '');
-                                                    setCreateCharacterEndpoint(`${baseUrl}/sora/v1/characters`);
-                                                } else {
-                                                    const baseUrl = DEFAULT_BASE_URL.replace(/\/+$/, '');
-                                                    setCreateCharacterEndpoint(`${baseUrl}/sora/v1/characters`);
-                                                }
-                                                setCreateCharacterOpen(true);
-                                            }}
+                                            onClick={() => setCreateCharacterOpen(true)}
                                             className={`px-2 py-1 text-[10px] rounded transition-colors ${
                                                 theme === 'dark'
                                                     ? 'bg-blue-600 hover:bg-blue-500 text-white'
                                                     : 'bg-blue-500 hover:bg-blue-600 text-white'
                                             }`}
                                         >
-                                            新建角色
+                                            新建组
+                                        </button>
+                                        <button
+                                            onClick={() => setPullCloudOpen(true)}
+                                            className={`px-2 py-1 text-[10px] rounded transition-colors ${
+                                                theme === 'dark'
+                                                    ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300'
+                                                    : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-700'
+                                            }`}
+                                        >
+                                            拉取云端
                                         </button>
                                         <button onClick={() => setCharactersOpen(false)}>
                                             <X
@@ -14560,89 +14667,89 @@ You must design a visual composition that tells the story through **8 distinct p
                                     </div>
                                 </div>
                                 <div className="flex-1 overflow-y-auto custom-scrollbar p-3">
-                                    {characterLibrary.length === 0 ? (
+                                    {seedanceCharacterLibrary.length === 0 ? (
                                         <div className={`text-center py-8 text-sm ${
                                             theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'
                                         }`}>
-                                            暂无角色，点击"新建角色"开始创建
+                                            暂无角色组，点击"新建组"开始创建
                                         </div>
                                     ) : (
-                                        <div className="grid grid-cols-2 gap-3">
-                                            {characterLibrary.map((character) => (
+                                        <div className="space-y-3">
+                                            {seedanceCharacterLibrary.map((group) => (
                                                 <div
-                                                    key={character.id}
-                                                    className={`group rounded-lg overflow-hidden border cursor-pointer hover:border-blue-500/50 transition-colors ${
+                                                    key={group.id}
+                                                    className={`rounded-lg overflow-hidden border ${
                                                         theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'
                                                     }`}
-                                                    onClick={() => {
-                                                        const tag = ` @${character.username} `;
-                                                        // 尝试找到当前激活的输入框
-                                                        const activeElement = document.activeElement;
-                                                        if (activeElement && (activeElement.tagName === 'TEXTAREA' || activeElement.tagName === 'INPUT')) {
-                                                            const textarea = activeElement;
-                                                            const start = textarea.selectionStart || 0;
-                                                            const end = textarea.selectionEnd || 0;
-                                                            const text = textarea.value;
-                                                            const newText = text.slice(0, start) + tag + text.slice(end);
-                                                            textarea.value = newText;
-                                                            const newCursorPos = start + tag.length;
-                                                            textarea.setSelectionRange(newCursorPos, newCursorPos);
-                                                            textarea.dispatchEvent(new Event('input', { bubbles: true }));
-                                                            textarea.focus();
-                                                        } else {
-                                                            // 复制到剪贴板
-                                                            navigator.clipboard.writeText(tag.trim()).then(() => {
-                                                                alert(`已复制角色标签: ${tag.trim()}`);
-                                                            });
-                                                        }
-                                                    }}
                                                 >
-                                                    <div className="aspect-square bg-zinc-800 relative group/char">
-                                                        {character.profile_picture_url ? (
-                                                            <img
-                                                                src={character.profile_picture_url}
-                                                                alt={character.username}
-                                                                className="w-full h-full object-cover"
-                                                                onError={(e) => {
-                                                                    e.target.style.display = 'none';
-                                                                }}
-                                                            />
-                                                        ) : (
-                                                            <div className="w-full h-full flex items-center justify-center text-zinc-500">
-                                                                <User size={24} />
-                                                            </div>
-                                                        )}
-                                                        {/* 删除按钮 */}
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                if (confirm(`确定要删除角色 "${character.username}" 吗？`)) {
-                                                                    const updated = characterLibrary.filter(c => c.id !== character.id);
-                                                                    setCharacterLibrary(updated);
-                                                                    try {
-                                                                        localStorage.setItem('tapnow_characters', JSON.stringify(updated));
-                                                                    } catch (err) {
-                                                                        console.error('保存角色库失败:', err);
-                                                                    }
-                                                                }
-                                                            }}
-                                                            className="absolute top-1 right-1 p-1.5 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 z-10"
-                                                            title="删除角色"
-                                                        >
-                                                            <Trash2 size={12} />
-                                                        </button>
+                                                    {/* Group Header */}
+                                                    <div className={`flex items-center justify-between px-2.5 py-2 ${
+                                                        theme === 'dark' ? 'bg-zinc-800/50' : 'bg-zinc-100/50'
+                                                    }`}>
+                                                        <span className={`text-xs font-semibold truncate ${
+                                                            theme === 'dark' ? 'text-zinc-200' : 'text-zinc-800'
+                                                        }`}>{group.name}</span>
+                                                        <div className="flex items-center gap-1">
+                                                            <span className={`text-[10px] ${
+                                                                theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'
+                                                            }`}>{group.assets?.length || 0}</span>
+                                                            <button
+                                                                onClick={() => deleteGroup(group.id)}
+                                                                className={`p-1 rounded transition-colors ${
+                                                                    theme === 'dark'
+                                                                        ? 'text-zinc-500 hover:text-red-400 hover:bg-zinc-800'
+                                                                        : 'text-zinc-400 hover:text-red-500 hover:bg-zinc-200'
+                                                                }`}
+                                                                title="删除组"
+                                                            >
+                                                                <Trash2 size={12} />
+                                                            </button>
+                                                        </div>
                                                     </div>
-                                                    <div className="p-2 relative">
-                                                        <p className={`text-xs truncate flex items-center gap-1 ${
-                                                            theme === 'dark' ? 'text-zinc-300' : 'text-zinc-700'
-                                                        }`}>
-                                                            {character.username}
-                                                            <LinkIcon 
-                                                                size={12} 
-                                                                className="text-green-500 shrink-0" 
-                                                                title="Sora 2 已同步"
-                                                            />
-                                                        </p>
+                                                    {/* Drop Zone */}
+                                                    <div
+                                                        className={`px-2.5 py-2 text-[10px] text-center border-b border-dashed transition-colors ${
+                                                            theme === 'dark'
+                                                                ? 'border-zinc-800 text-zinc-500'
+                                                                : 'border-zinc-200 text-zinc-400'
+                                                        }`}
+                                                        onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('bg-blue-500/10'); }}
+                                                        onDragLeave={(e) => { e.currentTarget.classList.remove('bg-blue-500/10'); }}
+                                                        onDrop={(e) => handleGroupDrop(e, group)}
+                                                    >
+                                                        拖拽图片/视频/音频到此处上传
+                                                    </div>
+                                                    {/* Asset Grid */}
+                                                    <div className="grid grid-cols-3 gap-1.5 p-2">
+                                                        {group.assets?.map(asset => (
+                                                            <div
+                                                                key={asset.id}
+                                                                onClick={() => spawnSeedanceAssetNode(asset)}
+                                                                className={`group relative aspect-square rounded border flex flex-col items-center justify-center gap-1 cursor-pointer hover:border-blue-500/50 transition-colors ${
+                                                                    theme === 'dark' ? 'bg-zinc-950 border-zinc-800' : 'bg-zinc-50 border-zinc-200'
+                                                                }`}
+                                                                title={`${asset.name} (${asset.assetType})`}
+                                                            >
+                                                                {asset.assetType === 'Image' ? <FileImage size={18} className={theme === 'dark' ? 'text-emerald-400' : 'text-emerald-500'} /> :
+                                                                 asset.assetType === 'Video' ? <Video size={18} className={theme === 'dark' ? 'text-purple-400' : 'text-purple-500'} /> :
+                                                                 <Music size={18} className={theme === 'dark' ? 'text-amber-400' : 'text-amber-500'} />}
+                                                                <span className={`text-[9px] truncate max-w-full px-1 ${
+                                                                    theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'
+                                                                }`}>{asset.name}</span>
+                                                                {asset.status === 'Processing' && (
+                                                                    <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded">
+                                                                        <Loader2 size={14} className="animate-spin text-white" />
+                                                                    </div>
+                                                                )}
+                                                                {/* Delete btn */}
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); deleteAsset(group.id, asset.id); }}
+                                                                    className="absolute top-0.5 right-0.5 p-0.5 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 z-10"
+                                                                >
+                                                                    <X size={8} />
+                                                                </button>
+                                                            </div>
+                                                        ))}
                                                     </div>
                                                 </div>
                                             ))}
@@ -14652,11 +14759,11 @@ You must design a visual composition that tells the story through **8 distinct p
                             </div>
                         )}
 
-                        {/* Create Character Modal */}
+                        {/* Create Group Modal */}
                         {createCharacterOpen && (
                             <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center" onClick={() => setCreateCharacterOpen(false)}>
-                                <div 
-                                    className={`w-[500px] max-h-[90vh] overflow-y-auto rounded-lg shadow-2xl flex flex-col ${
+                                <div
+                                    className={`w-[420px] max-h-[90vh] overflow-y-auto rounded-lg shadow-2xl flex flex-col ${
                                         theme === 'dark' ? 'bg-[#121214] border-zinc-800' : 'bg-white border-zinc-200'
                                     } border`}
                                     onClick={(e) => e.stopPropagation()}
@@ -14667,220 +14774,49 @@ You must design a visual composition that tells the story through **8 distinct p
                                         <h3 className={`font-bold text-sm ${
                                             theme === 'dark' ? 'text-zinc-300' : 'text-zinc-700'
                                         }`}>
-                                            新建角色
+                                            新建组
                                         </h3>
                                         <button onClick={() => setCreateCharacterOpen(false)}>
                                             <X size={16} className={theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'} />
                                         </button>
                                     </div>
                                     <div className="p-4 space-y-4">
-                                        {/* 视频源选择 */}
                                         <div>
-                                            <label className={`block text-xs mb-2 ${
+                                            <label className={`block text-xs mb-1.5 ${
                                                 theme === 'dark' ? 'text-zinc-300' : 'text-zinc-700'
                                             }`}>
-                                                视频源
-                                            </label>
-                                            <div className="flex gap-2 mb-2">
-                                                <button
-                                                    onClick={() => {
-                                                        setCreateCharacterVideoSourceType('url');
-                                                        setCreateCharacterSelectedTaskId('');
-                                                    }}
-                                                    className={`px-3 py-1.5 text-xs rounded transition-colors ${
-                                                        createCharacterVideoSourceType === 'url'
-                                                            ? theme === 'dark'
-                                                                ? 'bg-blue-600 text-white'
-                                                                : 'bg-blue-500 text-white'
-                                                            : theme === 'dark'
-                                                                ? 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-                                                                : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
-                                                    }`}
-                                                >
-                                                    输入视频 URL
-                                                </button>
-                                                <button
-                                                    onClick={() => {
-                                                        setCreateCharacterVideoSourceType('history');
-                                                        setCreateCharacterVideoUrl('');
-                                                        setCreateCharacterVideoError(null);
-                                                    }}
-                                                    className={`px-3 py-1.5 text-xs rounded transition-colors ${
-                                                        createCharacterVideoSourceType === 'history'
-                                                            ? theme === 'dark'
-                                                                ? 'bg-blue-600 text-white'
-                                                                : 'bg-blue-500 text-white'
-                                                            : theme === 'dark'
-                                                                ? 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-                                                                : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
-                                                    }`}
-                                                >
-                                                    从历史记录选择
-                                                </button>
-                                            </div>
-                                            
-                                            {createCharacterVideoSourceType === 'url' ? (
-                                                <input
-                                                    type="text"
-                                                    value={createCharacterVideoUrl}
-                                                    onChange={(e) => setCreateCharacterVideoUrl(e.target.value)}
-                                                    placeholder="输入视频 URL..."
-                                                    className={`w-full px-3 py-2 text-xs rounded border outline-none ${
-                                                        theme === 'dark'
-                                                            ? 'bg-zinc-900 border-zinc-700 text-zinc-200 placeholder-zinc-600'
-                                                            : 'bg-white border-zinc-300 text-zinc-800 placeholder-zinc-400'
-                                                    }`}
-                                                />
-                                            ) : (
-                                                <select
-                                                    value={createCharacterSelectedTaskId}
-                                                    onChange={(e) => {
-                                                        const taskId = e.target.value;
-                                                        setCreateCharacterSelectedTaskId(taskId);
-                                                        // 当选中历史视频时，自动获取视频URL并填充到URL输入框
-                                                        if (taskId) {
-                                                            const selectedHistoryItem = historyMap.get(taskId);
-                                                            if (selectedHistoryItem && selectedHistoryItem.url) {
-                                                                // 切换到URL输入模式并填充URL
-                                                                setCreateCharacterVideoSourceType('url');
-                                                                setCreateCharacterVideoUrl(selectedHistoryItem.url);
-                                                                setCreateCharacterSelectedTaskId(''); // 清空选择
-                                                            }
-                                                        }
-                                                    }}
-                                                    className={`w-full px-3 py-2 text-xs rounded border outline-none ${
-                                                        theme === 'dark'
-                                                            ? 'bg-zinc-900 border-zinc-700 text-zinc-200'
-                                                            : 'bg-white border-zinc-300 text-zinc-800'
-                                                    }`}
-                                                >
-                                                    <option value="">选择历史记录中的视频...</option>
-                                                    {history.filter(h => h.type === 'video' && h.status === 'completed' && h.url).map(item => (
-                                                        <option key={item.id} value={item.id}>
-                                                            {item.prompt?.slice(0, 50) || 'Untitled'} - {item.time}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            )}
-                                            
-                                            {/* 视频预览区域 */}
-                                            {(() => {
-                                                let currentVideoUrl = null;
-                                                if (createCharacterVideoSourceType === 'url' && createCharacterVideoUrl.trim()) {
-                                                    currentVideoUrl = createCharacterVideoUrl.trim();
-                                                } else if (createCharacterVideoSourceType === 'history' && createCharacterSelectedTaskId) {
-                                                    const selectedHistoryItem = historyMap.get(createCharacterSelectedTaskId);
-                                                    if (selectedHistoryItem && selectedHistoryItem.url) {
-                                                        currentVideoUrl = selectedHistoryItem.url;
-                                                    }
-                                                }
-                                                
-                                                return currentVideoUrl ? (
-                                                    <div className="mt-2 mb-2">
-                                                        <video 
-                                                            key={currentVideoUrl}
-                                                            controls 
-                                                            crossOrigin="anonymous"
-                                                            className="w-full h-40 object-contain bg-black rounded-lg" 
-                                                            src={currentVideoUrl}
-                                                            onError={(e) => {
-                                                                console.error('视频加载失败:', currentVideoUrl, e);
-                                                                setCreateCharacterVideoError('无法加载视频预览，请检查链接有效性或跨域限制');
-                                                            }}
-                                                            onLoadStart={() => {
-                                                                // 清除错误提示
-                                                                setCreateCharacterVideoError(null);
-                                                            }}
-                                                            onLoadedData={() => {
-                                                                // 视频加载成功，清除错误
-                                                                setCreateCharacterVideoError(null);
-                                                            }}
-                                                        />
-                                                        {createCharacterVideoError && (
-                                                            <div className="text-red-500 text-xs mt-1 text-center">
-                                                                {createCharacterVideoError}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                ) : null;
-                                            })()}
-                                        </div>
-                                        
-                                        {/* 时间范围 */}
-                                        <div>
-                                            <label className={`block text-xs mb-2 ${
-                                                theme === 'dark' ? 'text-zinc-300' : 'text-zinc-700'
-                                            }`}>
-                                                时间范围（秒，间隔需在 1-3 秒之间）
-                                            </label>
-                                            <div className="flex gap-2 items-center">
-                                                <input
-                                                    type="number"
-                                                    min="0"
-                                                    step="0.1"
-                                                    value={createCharacterStartSecond}
-                                                    onChange={(e) => setCreateCharacterStartSecond(parseFloat(e.target.value) || 0)}
-                                                    className={`w-20 px-2 py-1.5 text-xs rounded border outline-none ${
-                                                        theme === 'dark'
-                                                            ? 'bg-zinc-900 border-zinc-700 text-zinc-200'
-                                                            : 'bg-white border-zinc-300 text-zinc-800'
-                                                    }`}
-                                                />
-                                                <span className={`text-xs ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>到</span>
-                                                <input
-                                                    type="number"
-                                                    min="0"
-                                                    step="0.1"
-                                                    value={createCharacterEndSecond}
-                                                    onChange={(e) => setCreateCharacterEndSecond(parseFloat(e.target.value) || 0)}
-                                                    className={`w-20 px-2 py-1.5 text-xs rounded border outline-none ${
-                                                        theme === 'dark'
-                                                            ? 'bg-zinc-900 border-zinc-700 text-zinc-200'
-                                                            : 'bg-white border-zinc-300 text-zinc-800'
-                                                    }`}
-                                                />
-                                                <span className={`text-xs ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>
-                                                    秒（间隔: {(createCharacterEndSecond - createCharacterStartSecond).toFixed(1)}s）
-                                                </span>
-                                            </div>
-                                        </div>
-                                        
-                                        {/* 高级设置：API 接口地址 */}
-                                        <div>
-                                            <label className={`block text-xs mb-2 ${
-                                                theme === 'dark' ? 'text-zinc-300' : 'text-zinc-700'
-                                            }`}>
-                                                API 接口地址 (API Endpoint)
+                                                组名称
                                             </label>
                                             <input
                                                 type="text"
-                                                value={createCharacterEndpoint}
-                                                onChange={(e) => setCreateCharacterEndpoint(e.target.value)}
-                                                placeholder="例如: https://your-domain.com/sora/v1/characters"
-                                                className={`w-full px-3 py-2 text-xs rounded border outline-none font-mono ${
+                                                value={createGroupName}
+                                                onChange={(e) => setCreateGroupName(e.target.value)}
+                                                placeholder="例如：主角组"
+                                                className={`w-full px-3 py-2 text-xs rounded border outline-none ${
                                                     theme === 'dark'
                                                         ? 'bg-zinc-900 border-zinc-700 text-zinc-200 placeholder-zinc-600'
                                                         : 'bg-white border-zinc-300 text-zinc-800 placeholder-zinc-400'
                                                 }`}
-                                                onFocus={(e) => {
-                                                    // 如果为空，自动填充默认值
-                                                    if (!e.target.value) {
-                                                        const soraConfig = apiConfigs.find(c => c.type === 'Video' && (c.id === 'sora-2' || c.id === 'sora-2-pro'));
-                                                        const baseUrl = soraConfig 
-                                                            ? (soraConfig.url || DEFAULT_BASE_URL).replace(/\/+$/, '')
-                                                            : DEFAULT_BASE_URL.replace(/\/+$/, '');
-                                                        setCreateCharacterEndpoint(`${baseUrl}/sora/v1/characters`);
-                                                    }
-                                                }}
                                             />
-                                            <p className={`text-[10px] mt-1 ${
-                                                theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'
-                                            }`}>
-                                                默认自动填充，可根据服务商要求修改路径
-                                            </p>
                                         </div>
-                                        
-                                        {/* 提交按钮 */}
+                                        <div>
+                                            <label className={`block text-xs mb-1.5 ${
+                                                theme === 'dark' ? 'text-zinc-300' : 'text-zinc-700'
+                                            }`}>
+                                                描述（可选）
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={createGroupDesc}
+                                                onChange={(e) => setCreateGroupDesc(e.target.value)}
+                                                placeholder="输入组描述..."
+                                                className={`w-full px-3 py-2 text-xs rounded border outline-none ${
+                                                    theme === 'dark'
+                                                        ? 'bg-zinc-900 border-zinc-700 text-zinc-200 placeholder-zinc-600'
+                                                        : 'bg-white border-zinc-300 text-zinc-800 placeholder-zinc-400'
+                                                }`}
+                                            />
+                                        </div>
                                         <div className="flex justify-end gap-2 pt-2">
                                             <button
                                                 onClick={() => setCreateCharacterOpen(false)}
@@ -14894,42 +14830,147 @@ You must design a visual composition that tells the story through **8 distinct p
                                             </button>
                                             <button
                                                 onClick={async () => {
-                                                    if (createCharacterVideoSourceType === 'url' && !createCharacterVideoUrl.trim()) {
-                                                        alert('请输入视频 URL');
+                                                    if (!createGroupName.trim()) {
+                                                        alert('请输入组名称');
                                                         return;
                                                     }
-                                                    if (createCharacterVideoSourceType === 'history' && !createCharacterSelectedTaskId) {
-                                                        alert('请选择历史记录中的视频');
+                                                    if (!assetApiKey || !assetApiSecret) {
+                                                        alert('请先在设置中配置 Asset API AK/SK');
                                                         return;
                                                     }
-                                                    if (createCharacterEndSecond - createCharacterStartSecond < 1 || createCharacterEndSecond - createCharacterStartSecond > 3) {
-                                                        alert('时间范围必须在 1-3 秒之间');
-                                                        return;
-                                                    }
-                                                    setCreateCharacterSubmitting(true);
+                                                    setCreateGroupSubmitting(true);
                                                     try {
-                                                        // 优先使用用户手动输入的 API 地址，如果为空则使用默认地址
-                                                        const endpointToUse = createCharacterEndpoint.trim() || null;
-                                                        
-                                                        if (createCharacterVideoSourceType === 'url') {
-                                                            await createCharacter(createCharacterVideoUrl, createCharacterStartSecond, createCharacterEndSecond, null, endpointToUse);
-                                                        } else {
-                                                            await createCharacter('', createCharacterStartSecond, createCharacterEndSecond, createCharacterSelectedTaskId, endpointToUse);
-                                                        }
+                                                        const group = await fetchCreateAssetGroup(createGroupName.trim(), createGroupDesc.trim(), assetApiKey, assetApiSecret);
+                                                        setSeedanceCharacterLibrary(prev => [...prev, { id: group.id, name: createGroupName.trim(), description: createGroupDesc.trim(), assets: [] }]);
+                                                        setCreateCharacterOpen(false);
+                                                        setCreateGroupName('');
+                                                        setCreateGroupDesc('');
+                                                    } catch (err) {
+                                                        alert(`创建失败: ${err.message}`);
                                                     } finally {
-                                                        setCreateCharacterSubmitting(false);
+                                                        setCreateGroupSubmitting(false);
                                                     }
                                                 }}
-                                                disabled={createCharacterSubmitting}
+                                                disabled={createGroupSubmitting}
                                                 className={`px-4 py-2 text-xs rounded transition-colors ${
-                                                    createCharacterSubmitting
+                                                    createGroupSubmitting
                                                         ? 'bg-zinc-400 text-zinc-200 cursor-not-allowed'
                                                         : theme === 'dark'
                                                             ? 'bg-blue-600 text-white hover:bg-blue-500'
                                                             : 'bg-blue-500 text-white hover:bg-blue-600'
                                                 }`}
                                             >
-                                                {createCharacterSubmitting ? '创建中...' : '创建角色'}
+                                                {createGroupSubmitting ? '创建中...' : '创建'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Pull from Cloud Modal */}
+                        {pullCloudOpen && (
+                            <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center" onClick={() => setPullCloudOpen(false)}>
+                                <div
+                                    className={`w-[420px] max-h-[90vh] overflow-y-auto rounded-lg shadow-2xl flex flex-col ${
+                                        theme === 'dark' ? 'bg-[#121214] border-zinc-800' : 'bg-white border-zinc-200'
+                                    } border`}
+                                    onClick={(e) => e.stopPropagation()}
+                                >
+                                    <div className={`p-4 border-b flex justify-between items-center ${
+                                        theme === 'dark' ? 'border-zinc-800' : 'border-zinc-200'
+                                    }`}>
+                                        <h3 className={`font-bold text-sm ${
+                                            theme === 'dark' ? 'text-zinc-300' : 'text-zinc-700'
+                                        }`}>
+                                            拉取云端素材
+                                        </h3>
+                                        <button onClick={() => setPullCloudOpen(false)}>
+                                            <X size={16} className={theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'} />
+                                        </button>
+                                    </div>
+                                    <div className="p-4 space-y-4">
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => setPullCloudType('group')}
+                                                className={`flex-1 px-3 py-2 text-xs rounded transition-colors ${
+                                                    pullCloudType === 'group'
+                                                        ? theme === 'dark'
+                                                            ? 'bg-blue-600 text-white'
+                                                            : 'bg-blue-500 text-white'
+                                                        : theme === 'dark'
+                                                            ? 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                                                            : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                                                }`}
+                                            >
+                                                Group ID
+                                            </button>
+                                            <button
+                                                onClick={() => setPullCloudType('asset')}
+                                                className={`flex-1 px-3 py-2 text-xs rounded transition-colors ${
+                                                    pullCloudType === 'asset'
+                                                        ? theme === 'dark'
+                                                            ? 'bg-blue-600 text-white'
+                                                            : 'bg-blue-500 text-white'
+                                                        : theme === 'dark'
+                                                            ? 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                                                            : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                                                }`}
+                                            >
+                                                Asset ID
+                                            </button>
+                                        </div>
+                                        <div>
+                                            <label className={`block text-xs mb-1.5 ${
+                                                theme === 'dark' ? 'text-zinc-300' : 'text-zinc-700'
+                                            }`}>
+                                                {pullCloudType === 'group' ? 'Group ID' : 'Asset ID'}
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={pullCloudId}
+                                                onChange={(e) => setPullCloudId(e.target.value)}
+                                                placeholder={pullCloudType === 'group' ? '输入云端 Group ID...' : '输入云端 Asset ID...'}
+                                                className={`w-full px-3 py-2 text-xs rounded border outline-none ${
+                                                    theme === 'dark'
+                                                        ? 'bg-zinc-900 border-zinc-700 text-zinc-200 placeholder-zinc-600'
+                                                        : 'bg-white border-zinc-300 text-zinc-800 placeholder-zinc-400'
+                                                }`}
+                                            />
+                                        </div>
+                                        <div className="flex justify-end gap-2 pt-2">
+                                            <button
+                                                onClick={() => setPullCloudOpen(false)}
+                                                className={`px-4 py-2 text-xs rounded transition-colors ${
+                                                    theme === 'dark'
+                                                        ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                                                        : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
+                                                }`}
+                                            >
+                                                取消
+                                            </button>
+                                            <button
+                                                onClick={async () => {
+                                                    if (!pullCloudId.trim()) {
+                                                        alert('请输入 ID');
+                                                        return;
+                                                    }
+                                                    if (pullCloudType === 'group') {
+                                                        await pullCloudGroup(pullCloudId.trim());
+                                                    } else {
+                                                        await pullCloudAsset(pullCloudId.trim());
+                                                    }
+                                                }}
+                                                disabled={pullCloudSubmitting}
+                                                className={`px-4 py-2 text-xs rounded transition-colors ${
+                                                    pullCloudSubmitting
+                                                        ? 'bg-zinc-400 text-zinc-200 cursor-not-allowed'
+                                                        : theme === 'dark'
+                                                            ? 'bg-blue-600 text-white hover:bg-blue-500'
+                                                            : 'bg-blue-500 text-white hover:bg-blue-600'
+                                                }`}
+                                            >
+                                                {pullCloudSubmitting ? '拉取中...' : '拉取'}
                                             </button>
                                         </div>
                                     </div>
@@ -15451,6 +15492,7 @@ You must design a visual composition that tells the story through **8 distinct p
                                             { type: 'gen-image', label: 'seedream图像生成' },
                                             { type: 'rh-image', label: 'RH 全能图片' },
                                             { type: 'gen-video', label: 'seedance2.0视频生成' },
+                                            { type: 'seedance-asset', label: 'seedance2.0资产导入' },
                                             { type: 'image-compare', label: '图像对比' },
                                             { type: 'preview', label: '预览窗口' },
                                         ].map(item => (
@@ -15805,6 +15847,44 @@ You must design a visual composition that tells the story through **8 distinct p
                                                 placeholder="如果不想每个模型单独填 Key，可以在这里填一个全局 Key"
                                             />
                                     </div>
+                                    </div>
+                                    <div className="mb-2">
+                                        <label className={`text-[10px] font-medium uppercase tracking-wider ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-600'}`}>Asset API Access Key (AK)</label>
+                                        <div className="mt-1 flex gap-2">
+                                            <input
+                                                type="password"
+                                                value={assetApiKey}
+                                                onChange={(e) => {
+                                                    setAssetApiKey(e.target.value);
+                                                    localStorage.setItem('tapnow_asset_api_ak', e.target.value);
+                                                }}
+                                                className={`flex-1 rounded px-2 py-1 text-xs outline-none focus:border-blue-600/50 border ${
+                                                    theme === 'dark'
+                                                        ? 'bg-zinc-900 border-zinc-800 text-zinc-300'
+                                                        : 'bg-white border-zinc-300 text-zinc-900'
+                                                }`}
+                                                placeholder="用于 Seedance 资产导入节点拉取素材信息"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="mb-2">
+                                        <label className={`text-[10px] font-medium uppercase tracking-wider ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-600'}`}>Asset API Secret Key (SK)</label>
+                                        <div className="mt-1 flex gap-2">
+                                            <input
+                                                type="password"
+                                                value={assetApiSecret}
+                                                onChange={(e) => {
+                                                    setAssetApiSecret(e.target.value);
+                                                    localStorage.setItem('tapnow_asset_api_sk', e.target.value);
+                                                }}
+                                                className={`flex-1 rounded px-2 py-1 text-xs outline-none focus:border-blue-600/50 border ${
+                                                    theme === 'dark'
+                                                        ? 'bg-zinc-900 border-zinc-800 text-zinc-300'
+                                                        : 'bg-white border-zinc-300 text-zinc-900'
+                                                }`}
+                                                placeholder="用于 Seedance 资产导入节点拉取素材信息"
+                                            />
+                                        </div>
                                     </div>
                                     <div className="mb-2">
                                         <div className="flex items-center justify-between">
