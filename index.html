@@ -8102,7 +8102,7 @@ You must design a visual composition that tells the story through **8 distinct p
             // --- 节点操作 ---
             const addNode = (type, worldX, worldY, sourceId, initialContent = undefined, initialDimensions = undefined, targetId = undefined, inputType = undefined) => {
                 const defaultSize = type === 'gen-video'
-                    ? { w: 380, h: 420 }
+                    ? { w: 580, h: 320 }
                     : (type === 'gen-image' || type === 'rh-image')
                         ? { w: 360, h: 340 }
                         : type === 'audio-input'
@@ -15448,9 +15448,9 @@ You must design a visual composition that tells the story through **8 distinct p
                                             { type: 'audio-input', label: '音频输入' },
                                             { type: 'video-analyze', label: '视频拆解 / 提示词反推' },
                                             { type: 'storyboard-node', label: '智能分镜表' },
-                                            { type: 'gen-image', label: 'AI 绘图' },
+                                            { type: 'gen-image', label: 'seedream图像生成' },
                                             { type: 'rh-image', label: 'RH 全能图片' },
-                                            { type: 'gen-video', label: 'AI 视频' },
+                                            { type: 'gen-video', label: 'seedance2.0视频生成' },
                                             { type: 'image-compare', label: '图像对比' },
                                             { type: 'preview', label: '预览窗口' },
                                         ].map(item => (
