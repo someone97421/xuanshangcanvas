@@ -1076,7 +1076,10 @@
         const DEFAULT_TEMP_HOSTING_CONFIG = {
             provider: 'Litterbox 临时图床',
             url: 'https://litterbox.catbox.moe/resources/internals/api.php',
-            expiry: '12h'
+            expiry: '12h',
+            naixiProvider: '奶昔图床',
+            naixiUrl: 'https://naixiai.cn/api/1/upload',
+            naixiKey: ''
         };
         const ALLOWED_API_CONFIG_IDS = ['gemini-3-pro', 'seedream-5.0', 'seedream-4.5', 'seedream-4.0', 'rh-image-pro', 'rh-image-v2', 'seedance-2.0', 'seedance-2.0-fast'];
 
@@ -1729,7 +1732,8 @@ You must design a visual composition that tells the story through **8 distinct p
                     const parsed = saved ? JSON.parse(saved) : {};
                     return {
                         ...DEFAULT_TEMP_HOSTING_CONFIG,
-                        expiry: parsed?.expiry || DEFAULT_TEMP_HOSTING_CONFIG.expiry
+                        expiry: parsed?.expiry || DEFAULT_TEMP_HOSTING_CONFIG.expiry,
+                        naixiKey: parsed?.naixiKey || DEFAULT_TEMP_HOSTING_CONFIG.naixiKey
                     };
                 } catch (e) {
                     return DEFAULT_TEMP_HOSTING_CONFIG;
@@ -2029,7 +2033,8 @@ You must design a visual composition that tells the story through **8 distinct p
             }, [nodes, connections, view, debouncedSaveWorkspace]);
             useEffect(() => {
                 localStorage.setItem('tapnow_temp_hosting_config', JSON.stringify({
-                    expiry: tempHostingConfig.expiry || DEFAULT_TEMP_HOSTING_CONFIG.expiry
+                    expiry: tempHostingConfig.expiry || DEFAULT_TEMP_HOSTING_CONFIG.expiry,
+                    naixiKey: tempHostingConfig.naixiKey || DEFAULT_TEMP_HOSTING_CONFIG.naixiKey
                 }));
             }, [tempHostingConfig]);
             
@@ -4562,6 +4567,56 @@ You must design a visual composition that tells the story through **8 distinct p
             };
 
             const uploadBlobToTempHosting = async (blob, filename = 'asset.bin', expiryOverride = null) => {
+                // 判断文件类型：通过文件名后缀或blob.type
+                const isAudio = /\.(mp3|wav|ogg|flac|aac|m4a)$/i.test(filename) || blob.type.startsWith('audio/');
+
+                // 音频文件直接使用 Litterbox
+                if (isAudio) {
+                    return await uploadToLitterbox(blob, filename, expiryOverride);
+                }
+
+                // 图片和视频优先尝试奶昔图床，如果配置了key的话
+                const naixiKey = tempHostingConfig.naixiKey || DEFAULT_TEMP_HOSTING_CONFIG.naixiKey;
+                if (naixiKey) {
+                    try {
+                        return await uploadToNaixi(blob, filename, naixiKey);
+                    } catch (error) {
+                        console.warn('奶昔图床上传失败，自动切换到 Litterbox:', error);
+                        // 奶昔图床失败，自动回退到 Litterbox
+                    }
+                }
+
+                // 使用 Litterbox 作为备选
+                return await uploadToLitterbox(blob, filename, expiryOverride);
+            };
+
+            // 上传到奶昔图床
+            const uploadToNaixi = async (blob, filename, apiKey) => {
+                const formData = new FormData();
+                formData.append('source', blob, filename);
+
+                const response = await fetch(DEFAULT_TEMP_HOSTING_CONFIG.naixiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'X-API-Key': apiKey
+                    },
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(`奶昔图床上传失败: HTTP ${response.status}`);
+                }
+
+                const result = await response.json();
+                if (result.status_code !== 200 || !result.image?.url) {
+                    throw new Error(result.status_txt || '奶昔图床上传失败');
+                }
+
+                return result.image.url;
+            };
+
+            // 上传到 Litterbox
+            const uploadToLitterbox = async (blob, filename, expiryOverride = null) => {
                 const formData = new FormData();
                 formData.append('reqtype', 'fileupload');
                 formData.append('time', expiryOverride || tempHostingConfig.expiry || '12h');
@@ -15277,9 +15332,31 @@ You must design a visual composition that tells the story through **8 distinct p
                                                     ))}
                                                 </select>
                                             </div>
+                                            <div className="pt-2 border-t border-dashed border-zinc-700/50 mt-2">
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <div className={`w-1.5 h-1.5 rounded-full ${theme === 'dark' ? 'bg-pink-400' : 'bg-pink-500'}`}></div>
+                                                    <span className={`text-xs font-bold ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`}>奶昔图床</span>
+                                                </div>
+                                                <div className="grid grid-cols-4 items-center gap-2">
+                                                    <label className={`text-[10px] font-medium uppercase tracking-wider text-right ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-600'}`}>
+                                                        API Key
+                                                    </label>
+                                                    <input
+                                                        type="password"
+                                                        value={tempHostingConfig.naixiKey}
+                                                        onChange={(e) => setTempHostingConfig(prev => ({ ...prev, naixiKey: e.target.value }))}
+                                                        placeholder="输入奶昔图床 API Key..."
+                                                        className={`col-span-3 w-full rounded px-2 py-1 text-xs outline-none focus:border-blue-600/50 border ${
+                                                            theme === 'dark'
+                                                                ? 'bg-zinc-900 border-zinc-800 text-zinc-300'
+                                                                : 'bg-white border-zinc-300 text-zinc-900'
+                                                        }`}
+                                                    />
+                                                </div>
+                                            </div>
                                         </div>
                                         <div className={`mt-3 text-[10px] ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-500'}`}>
-                                            文件上传转公网 URL 统一走 Litterbox，仅保留时长在这里配置。
+                                            图片/视频优先使用奶昔图床（需配置 Key），失败自动切回 Litterbox；音频始终使用 Litterbox。
                                         </div>
                                     </div>
                                     <div className="flex justify-between items-center mb-2">
