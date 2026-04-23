@@ -343,6 +343,7 @@
         const Brush = (p) => <IconWrapper name="Brush" {...p} />;
         const Undo2 = (p) => <IconWrapper name="Undo2" {...p} />;
         const Eraser = (p) => <IconWrapper name="Eraser" {...p} />;
+        const Bug = (p) => <IconWrapper name="Bug" {...p} />;
 
         // --- MaskVisualFeedback 组件：蒙版视觉反馈层 ---
         const MaskVisualFeedback = ({ canvasRef, isDrawing }) => {
@@ -512,10 +513,12 @@
             onImageClick, 
             onImageContextMenu,
             onRefresh,
+            onAbort,
             Loader2,
             Trash2,
             RefreshCw,
-            Download
+            Download,
+            X
         }) => {
             return (
                 <div
@@ -554,6 +557,10 @@
                                         }}
                                     />
                                 )
+                        ) : item.status === 'failed' ? (
+                            <div className="w-full h-full flex items-center justify-center">
+                                <span className="text-[10px] text-red-500 font-medium">生成失败</span>
+                            </div>
                         ) : (
                             <div className="w-full h-full flex items-center justify-center">
                                 <Loader2 className="animate-spin text-zinc-600" />
@@ -599,6 +606,19 @@
                                     <Download size={12} />
                                 </button>
                             )}
+                            {item.status === 'generating' && onAbort && (
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); onAbort(item.id); }}
+                                    className={`shrink-0 p-0.5 ${
+                                        theme === 'dark'
+                                            ? 'text-zinc-500 hover:text-red-500'
+                                            : 'text-zinc-400 hover:text-red-500'
+                                    }`}
+                                    title="终止任务"
+                                >
+                                    <X size={12} />
+                                </button>
+                            )}
                             {item.type === 'video' && (item.status === 'generating' || item.status === 'failed') && (
                                 <button
                                     onClick={(e) => {
@@ -641,7 +661,7 @@
                             <span className={theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}>
                                 {item.time} · {item.modelName}
                                 {typeof item.durationMs === 'number' && item.durationMs > 0 && (
-                                    <> · 用时 {(item.durationMs / 1000).toFixed(1)}s</>
+                                    <> · {item.status === 'generating' ? '已耗时' : '用时'} {(item.durationMs / 1000).toFixed(1)}s</>
                                 )}
                             </span>
                         </div>
@@ -1059,37 +1079,29 @@
 
         // --- 默认配置 ---
         const DEFAULT_BASE_URL = 'https://ai.comfly.chat';
-        
-        const ARK_MEDIA_API_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3';
+        const DEFAULT_XSZY_BASE_URL = 'https://www.xszy.top';
         const RUNNINGHUB_API_BASE_URL = 'https://www.runninghub.ai/openapi/v2';
 
-        const DEFAULT_API_CONFIGS = [
+        const getDefaultApiConfigs = (arkBaseUrl) => [
             { id: 'gemini-3-pro', provider: 'Gemini 3 Pro', modelName: 'gemini-3-pro-preview', type: 'Chat', key: '', url: DEFAULT_BASE_URL, format: 'openai' },
-            { id: 'seedream-5.0', provider: 'Seedream 5.0', modelName: 'doubao-seedream-5-0-260128', type: 'Image', key: '', url: ARK_MEDIA_API_BASE_URL },
-            { id: 'seedream-4.5', provider: 'Seedream 4.5', modelName: 'doubao-seedream-4-5-251128', type: 'Image', key: '', url: ARK_MEDIA_API_BASE_URL },
-            { id: 'seedream-4.0', provider: 'Seedream 4.0', modelName: 'doubao-seedream-4-0-250828', type: 'Image', key: '', url: ARK_MEDIA_API_BASE_URL },
+            { id: 'seedream-5.0', provider: 'Seedream 5.0', modelName: 'doubao-seedream-5-0-260128', type: 'Image', key: '', url: arkBaseUrl },
+            { id: 'seedream-4.5', provider: 'Seedream 4.5', modelName: 'doubao-seedream-4-5-251128', type: 'Image', key: '', url: arkBaseUrl },
+            { id: 'seedream-4.0', provider: 'Seedream 4.0', modelName: 'doubao-seedream-4-0-250828', type: 'Image', key: '', url: arkBaseUrl },
             { id: 'rh-image-pro', provider: 'RH 全能图片 Pro', modelName: 'rhart-image-n-pro', type: 'Image', key: '', url: RUNNINGHUB_API_BASE_URL },
             { id: 'rh-image-v2', provider: 'RH 全能图片 V2', modelName: 'rhart-image-n-g31-flash', type: 'Image', key: '', url: RUNNINGHUB_API_BASE_URL },
-            { id: 'seedance-2.0', provider: 'Seedance 2.0', modelName: 'doubao-seedance-2-0-260128', type: 'Video', key: '', url: ARK_MEDIA_API_BASE_URL, durations: ['5s', '10s', '15s'] },
-            { id: 'seedance-2.0-fast', provider: 'Seedance 2.0 Fast', modelName: 'doubao-seedance-2-0-fast-260128', type: 'Video', key: '', url: ARK_MEDIA_API_BASE_URL, durations: ['5s', '10s', '15s'] },
+            { id: 'rh-image-g-2', provider: 'RH 全能图片 G-2.0', modelName: 'rhart-image-g-2', type: 'Image', key: '', url: RUNNINGHUB_API_BASE_URL },
+            { id: 'seedance-2.0', provider: 'Seedance 2.0', modelName: 'Doubao-Seedance-2.0', type: 'Video', key: '', url: arkBaseUrl, durations: ['5s', '10s', '15s'] },
+            { id: 'seedance-2.0-fast', provider: 'Seedance 2.0 Fast', modelName: 'Doubao-Seedance-2.0-fast', type: 'Video', key: '', url: arkBaseUrl, durations: ['5s', '10s', '15s'] },
         ];
         const DEFAULT_TEMP_HOSTING_CONFIG = {
             provider: 'Litterbox 临时图床',
             url: 'https://litterbox.catbox.moe/resources/internals/api.php',
-            expiry: '12h',
-            naixiProvider: '奶昔图床',
-            naixiUrl: 'https://naixiai.cn/api/1/upload',
-            naixiKey: ''
+            expiry: '12h'
         };
-        const ALLOWED_API_CONFIG_IDS = ['gemini-3-pro', 'seedream-5.0', 'seedream-4.5', 'seedream-4.0', 'rh-image-pro', 'rh-image-v2', 'seedance-2.0', 'seedance-2.0-fast'];
+        const ALLOWED_API_CONFIG_IDS = ['gemini-3-pro', 'seedream-5.0', 'seedream-4.5', 'seedream-4.0', 'rh-image-pro', 'rh-image-v2', 'rh-image-g-2', 'seedance-2.0', 'seedance-2.0-fast'];
 
         // --- Asset API 配置 (用于 seedance-asset 节点拉取素材信息) ---
-        const ASSET_API_REGION = 'cn-beijing';
-        const ASSET_API_SERVICE = 'ark';
-        const ASSET_API_VERSION = '2024-01-01';
         const ASSET_API_PROJECT_NAME = 'default';
-        const ASSET_API_HOST = `ark.${ASSET_API_REGION}.volcengineapi.com`;
-        const ASSET_API_BASE_URL = `https://${ASSET_API_HOST}`;
         const normalizeAssetId = (value) => String(value || '').trim().replace(/^asset:\/\//i, '');
         const copyTextToClipboard = async (text, label = '内容') => {
             const value = String(text || '').trim();
@@ -1284,9 +1296,17 @@ You must design a visual composition that tells the story through **8 distinct p
 
         const getRatiosForModel = (modelId) => {
             if (!modelId) return RATIOS;
+            if (modelId.includes('seedance')) return ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'];
             if (modelId.includes('rh-image-pro')) return ['Auto', '1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '5:4', '4:5', '21:9'];
             if (modelId.includes('rh-image-v2')) return ['Auto', '1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '5:4', '4:5', '21:9', '1:4', '4:1', '1:8', '8:1'];
+            if (modelId.includes('rh-image-g-2')) return ['1:1', '2:3', '3:2', '4:5', '5:4', '4:3', '3:4', '16:9', '9:16', '21:9'];
             return RATIOS;
+        };
+        const getVideoResolutionsForModel = (modelId) => {
+            if (!modelId) return VIDEO_RES_OPTIONS;
+            if (modelId === 'seedance-2.0') return ['480p', '720p', '1080p'];
+            if (modelId === 'seedance-2.0-fast') return ['480p', '720p'];
+            return VIDEO_RES_OPTIONS;
         };
         const RESOLUTIONS = ['Auto', '1K', '2K', '4K'];
         // 根据模型返回不同的分辨率选项
@@ -1295,6 +1315,7 @@ You must design a visual composition that tells the story through **8 distinct p
             if (modelId.includes('seedream-5.0')) return ['2K', '3K'];
             if (modelId.includes('seedream-4.5')) return ['2K', '4K'];
             if (modelId.includes('seedream-4.0')) return ['1K', '2K', '4K'];
+            if (modelId.includes('rh-image-g-2')) return [];
             if (modelId.includes('rh-image-')) return ['1K', '2K', '4K'];
             return RESOLUTIONS;
         }; 
@@ -1304,12 +1325,14 @@ You must design a visual composition that tells the story through **8 distinct p
         const calculateResolution = (ratio, baseResolution) => {
             let baseW = 1024;
             let baseH = 1024;
+            const upperRes = (baseResolution || '').toUpperCase();
             
-            if (baseResolution === '1080P') { baseW = 1920; baseH = 1080; }
-            else if (baseResolution === '720P') { baseW = 1280; baseH = 720; }
-            else if (baseResolution === '2K') { baseW = 2048; baseH = 2048; }
-            else if (baseResolution === '3K') { baseW = 3072; baseH = 3072; }
-            else if (baseResolution === '4K') { baseW = 3840; baseH = 2160; }
+            if (upperRes === '1080P') { baseW = 1920; baseH = 1080; }
+            else if (upperRes === '720P') { baseW = 1280; baseH = 720; }
+            else if (upperRes === '480P') { baseW = 640; baseH = 480; }
+            else if (upperRes === '2K') { baseW = 2048; baseH = 2048; }
+            else if (upperRes === '3K') { baseW = 3072; baseH = 3072; }
+            else if (upperRes === '4K') { baseW = 3840; baseH = 2160; }
 
             if (ratio === 'Auto') {
                 return { str: `${baseW}x${baseH}`, w: baseW, h: baseH };
@@ -1702,9 +1725,14 @@ You must design a visual composition that tells the story through **8 distinct p
             const dragStartPosRef = useRef(new Map()); // nodeId -> { x, y }
             const [selectedNodeId, setSelectedNodeId] = useState(null);
 
+            const [xszyBaseUrl, setXszyBaseUrl] = useState(() => localStorage.getItem('tapnow_xszy_base_url') || DEFAULT_XSZY_BASE_URL);
+            const arkMediaApiBaseUrl = `${xszyBaseUrl.replace(/\/+$/, '')}/api/v3`;
+            const assetApiBaseUrl = xszyBaseUrl.replace(/\/+$/, '');
+
             const [apiConfigs, setApiConfigs] = useState(() => {
                 const saved = localStorage.getItem('tapnow_api_configs');
-                let configs = saved ? JSON.parse(saved) : DEFAULT_API_CONFIGS;
+                const defaultConfigs = getDefaultApiConfigs(arkMediaApiBaseUrl);
+                let configs = saved ? JSON.parse(saved) : defaultConfigs;
                 // 保留内置配置和自定义配置
                 configs = configs.filter(c => ALLOWED_API_CONFIG_IDS.includes(c.id) || c.isCustom);
 
@@ -1715,25 +1743,28 @@ You must design a visual composition that tells the story through **8 distinct p
                         : c
                 );
 
-                const mergedConfigs = DEFAULT_API_CONFIGS.map(defaultConfig => {
+                const mergedConfigs = defaultConfigs.map(defaultConfig => {
                     const savedConfig = configs.find(c => c.id === defaultConfig.id);
-                    return savedConfig ? { ...defaultConfig, ...savedConfig } : defaultConfig;
+                    if (!savedConfig) return defaultConfig;
+                    // 自动迁移旧 Ark URL 到玄上之音
+                    const migratedUrl = (savedConfig.url || '').includes('volces')
+                        ? defaultConfig.url
+                        : savedConfig.url;
+                    return { ...defaultConfig, ...savedConfig, url: migratedUrl };
                 });
 
                 // 追加自定义配置并确保 format 默认值为 openai
-                const customConfigs = configs.filter(c => c.isCustom && !DEFAULT_API_CONFIGS.find(d => d.id === c.id));
+                const customConfigs = configs.filter(c => c.isCustom && !defaultConfigs.find(d => d.id === c.id));
                 return [...mergedConfigs, ...customConfigs].map(c => ({ ...c, format: c.format || 'openai' }));
             });
-            const [assetApiKey, setAssetApiKey] = useState(() => localStorage.getItem('tapnow_asset_api_ak') || '');
-            const [assetApiSecret, setAssetApiSecret] = useState(() => localStorage.getItem('tapnow_asset_api_sk') || '');
+            const [assetApiKey, setAssetApiKey] = useState(() => localStorage.getItem('tapnow_asset_api_ak') || localStorage.getItem('tapnow_ark_media_api_key') || '');
             const [tempHostingConfig, setTempHostingConfig] = useState(() => {
                 try {
                     const saved = localStorage.getItem('tapnow_temp_hosting_config');
                     const parsed = saved ? JSON.parse(saved) : {};
                     return {
                         ...DEFAULT_TEMP_HOSTING_CONFIG,
-                        expiry: parsed?.expiry || DEFAULT_TEMP_HOSTING_CONFIG.expiry,
-                        naixiKey: parsed?.naixiKey || DEFAULT_TEMP_HOSTING_CONFIG.naixiKey
+                        expiry: parsed?.expiry || DEFAULT_TEMP_HOSTING_CONFIG.expiry
                     };
                 } catch (e) {
                     return DEFAULT_TEMP_HOSTING_CONFIG;
@@ -1857,6 +1888,58 @@ You must design a visual composition that tells the story through **8 distinct p
             const [settingsOpen, setSettingsOpen] = useState(false);
             const [historyOpen, setHistoryOpen] = useState(false);
             const [charactersOpen, setCharactersOpen] = useState(false);
+            const [debugOpen, setDebugOpen] = useState(false);
+            const [debugLogs, setDebugLogs] = useState([]);
+
+            const sanitizeDebugData = (data) => {
+                if (!data) return '';
+                let str = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+                // 简写 data URL base64
+                str = str.replace(/data:[^;]+;base64,[A-Za-z0-9+/=]{100,}/g, (match) => `[Base64:${match.length}]`);
+                // 简写独立长 base64 字符串
+                str = str.replace(/"([A-Za-z0-9+/=]{500,})"/g, (match, p1) => `"[Base64:${p1.length}]"`);
+                return str;
+            };
+
+            const addDebugLog = (type, label, request, response, error = null, groupId = null) => {
+                const log = {
+                    id: Date.now() + Math.random().toString(36).slice(2, 8),
+                    time: new Date().toLocaleTimeString(),
+                    type,
+                    label,
+                    request: sanitizeDebugData(request),
+                    response: sanitizeDebugData(response),
+                    error: error ? String(error) : null
+                };
+                if (groupId) {
+                    setDebugLogs(prev => {
+                        const idx = prev.findIndex(l => l.groupId === groupId);
+                        if (idx >= 0) {
+                            const next = [...prev];
+                            const existing = next[idx];
+                            // 轮询日志合并：只保留最近 3 条，避免列表过长
+                            const newChildren = [log, ...existing.children].slice(0, 3);
+                            next[idx] = {
+                                ...existing,
+                                time: log.time,
+                                type: log.type === 'error' ? 'error' : (existing.type === 'error' ? 'error' : log.type),
+                                children: newChildren
+                            };
+                            return next;
+                        }
+                        return [{
+                            id: groupId,
+                            groupId,
+                            time: log.time,
+                            type: 'group',
+                            label: label.replace(/#\d+/, '').trim(),
+                            children: [log]
+                        }, ...prev].slice(0, 500);
+                    });
+                } else {
+                    setDebugLogs(prev => [log, ...prev].slice(0, 500));
+                }
+            };
             const [seedanceCharacterLibrary, setSeedanceCharacterLibrary] = useState(() => {
                 try {
                     const saved = localStorage.getItem('tapnow_seedance_characters');
@@ -2033,8 +2116,7 @@ You must design a visual composition that tells the story through **8 distinct p
             }, [nodes, connections, view, debouncedSaveWorkspace]);
             useEffect(() => {
                 localStorage.setItem('tapnow_temp_hosting_config', JSON.stringify({
-                    expiry: tempHostingConfig.expiry || DEFAULT_TEMP_HOSTING_CONFIG.expiry,
-                    naixiKey: tempHostingConfig.naixiKey || DEFAULT_TEMP_HOSTING_CONFIG.naixiKey
+                    expiry: tempHostingConfig.expiry || DEFAULT_TEMP_HOSTING_CONFIG.expiry
                 }));
             }, [tempHostingConfig]);
             
@@ -2411,7 +2493,7 @@ You must design a visual composition that tells the story through **8 distinct p
                 canvasElement.addEventListener('wheel', wheelHandler, { passive: false });
 
                 return () => {
-                    canvasElement.removeEventListener('wheel', wheelHandler);
+                    canvasElement.removeEventListener('wheel', wheelHandler, { passive: false });
                 };
             }, [view]);
 
@@ -3209,10 +3291,12 @@ You must design a visual composition that tells the story through **8 distinct p
                     } else if (sourceNode.type === 'seedance-asset' && sourceNode.settings?.assetId) {
                         const assetTypeMap = { Image: 'image', Video: 'video', Audio: 'audio' };
                         const assetType = assetTypeMap[sourceNode.settings.assetType] || 'image';
+                        // 当目标节点不支持 asset:// 协议时，使用原始素材 HTTP URL
+                        const assetUrl = sourceNode.settings.assetUrl || '';
                         targetAssets.push({
                             type: assetType,
-                            url: `asset://${sourceNode.settings.assetId}`,
-                            previewUrl: sourceNode.settings.assetUrl || '',
+                            url: assetUrl,
+                            previewUrl: assetUrl,
                             nodeId: sourceNode.id,
                             name: sourceNode.settings.assetName || sourceNode.settings.assetId || 'Seedance资产',
                             isSeedanceAsset: true,
@@ -3260,7 +3344,7 @@ You must design a visual composition that tells the story through **8 distinct p
                         nodeConnections.set(inputType, []);
                     }
                     const sourceNode = nodesMap.get(conn.from);
-                    if (sourceNode && ((sourceNode.type === 'input-image') || (sourceNode.type === 'video-input'))) {
+                    if (sourceNode && ((sourceNode.type === 'input-image') || (sourceNode.type === 'video-input') || (sourceNode.type === 'seedance-asset'))) {
                         let images = [];
                         if (sourceNode.type === 'video-input') {
                             const selected = sourceNode.selectedKeyframes && sourceNode.selectedKeyframes.length > 0 
@@ -3271,6 +3355,9 @@ You must design a visual composition that tells the story through **8 distinct p
                             } else if (sourceNode.frames && sourceNode.frames.length > 0) {
                                 images = [sourceNode.frames[0].url];
                             }
+                        } else if (sourceNode.type === 'seedance-asset' && sourceNode.settings?.assetUrl) {
+                            // 传入不支持 asset:// 协议的下游节点时，使用原始素材 HTTP URL
+                            images = [sourceNode.settings.assetUrl];
                         } else if (sourceNode.content) {
                             images = [sourceNode.content];
                         }
@@ -3872,6 +3959,10 @@ You must design a visual composition that tells the story through **8 distinct p
                 }
             };
 
+            const abortHistoryTask = (id) => {
+                setHistory(prev => prev.map(item => item.id === id ? { ...item, status: 'failed', errorMsg: '用户已终止', progress: 0 } : item));
+            };
+
             const addNewModel = () => {
                 const newConfig = { id: `custom-${Date.now()}`, provider: 'New Model', modelName: 'new-model-id', type: 'Chat', key: '', url: DEFAULT_BASE_URL, isCustom: true, format: 'openai' };
                 setApiConfigs([...apiConfigs, newConfig]);
@@ -3883,7 +3974,8 @@ You must design a visual composition that tells the story through **8 distinct p
                 setApiTesting(id);
                 setApiStatus((prev) => ({ ...prev, [id]: 'idle' }));
                 const config = apiConfigsMap.get(id);
-                const apiKey = config?.key;
+                const isXszyModel = id.includes('seedream') || id.includes('seedance');
+                const apiKey = isXszyModel ? assetApiKey : config?.key;
 
                 if (!apiKey) {
                     setApiStatus((prev) => ({ ...prev, [id]: 'error' }));
@@ -3899,9 +3991,9 @@ You must design a visual composition that tells the story through **8 distinct p
                     const chatBase = (config?.url || DEFAULT_BASE_URL).replace(/\/+$/, '');
                     const resolvedChatUrl = isChatConfig ? resolveChatEndpoint(chatBase) : null;
                     const testUrl = isSeedreamConfig
-                        ? `${config?.url || ARK_MEDIA_API_BASE_URL}/images/generations`
+                        ? `${config?.url || arkMediaApiBaseUrl}/images/generations`
                         : isSeedanceConfig
-                            ? `${config?.url || ARK_MEDIA_API_BASE_URL}/contents/generations/tasks`
+                            ? `${config?.url || arkMediaApiBaseUrl}/contents/generations/tasks`
                             : isRunningHubConfig
                                 ? `${config?.url || RUNNINGHUB_API_BASE_URL}/query`
                                 : isChatConfig && resolvedChatUrl
@@ -3923,9 +4015,15 @@ You must design a visual composition that tells the story through **8 distinct p
 
             const saveApiConfigs = () => {
                 try {
-                    localStorage.setItem('tapnow_api_configs', JSON.stringify(apiConfigs));
+                    // 同步 xszyBaseUrl 到内置模型配置
+                    const updatedConfigs = apiConfigs.map(c => {
+                        if (c.isCustom || c.id.includes('rh-image') || c.id === 'gemini-3-pro') return c;
+                        return { ...c, url: arkMediaApiBaseUrl };
+                    });
+                    setApiConfigs(updatedConfigs);
+                    localStorage.setItem('tapnow_api_configs', JSON.stringify(updatedConfigs));
                     localStorage.setItem('tapnow_asset_api_ak', assetApiKey);
-                    localStorage.setItem('tapnow_asset_api_sk', assetApiSecret);
+                    localStorage.setItem('tapnow_xszy_base_url', xszyBaseUrl);
                     localStorage.removeItem('tapnow_global_key');
                     alert('配置已保存到浏览器');
                 } catch (err) {
@@ -3939,8 +4037,8 @@ You must design a visual composition that tells the story through **8 distinct p
                         version: '1.0.0',
                         exportedAt: new Date().toISOString(),
                         apiConfigs,
+                        xszyBaseUrl,
                         assetApiKey,
-                        assetApiSecret,
                         tempHostingConfig: DEFAULT_TEMP_HOSTING_CONFIG
                     };
                     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -3973,14 +4071,15 @@ You must design a visual composition that tells the story through **8 distinct p
                         }
                         if (confirm('导入配置将覆盖当前所有 API 配置，是否继续？')) {
                             setApiConfigs(data.apiConfigs.map(c => ({ ...c, format: c.format || 'openai' })));
+                            if (data.xszyBaseUrl !== undefined) {
+                                setXszyBaseUrl(data.xszyBaseUrl);
+                                localStorage.setItem('tapnow_xszy_base_url', data.xszyBaseUrl);
+                            }
                             if (data.assetApiKey !== undefined) {
                                 setAssetApiKey(data.assetApiKey);
                                 localStorage.setItem('tapnow_asset_api_ak', data.assetApiKey);
                             }
-                            if (data.assetApiSecret !== undefined) {
-                                setAssetApiSecret(data.assetApiSecret);
-                                localStorage.setItem('tapnow_asset_api_sk', data.assetApiSecret);
-                            }
+
                             localStorage.removeItem('tapnow_global_key');
                             alert('配置导入成功');
                         }
@@ -3993,14 +4092,15 @@ You must design a visual composition that tells the story through **8 distinct p
 
             const clearApiConfigs = () => {
                 if (confirm('确定要清空所有 API 配置并恢复默认吗？（自定义配置也会被删除）')) {
-                    setApiConfigs(DEFAULT_API_CONFIGS.map(c => ({ ...c, format: c.format || 'openai' })));
+                    setApiConfigs(getDefaultApiConfigs(arkMediaApiBaseUrl).map(c => ({ ...c, format: c.format || 'openai' })));
                     setAssetApiKey('');
-                    setAssetApiSecret('');
+                    setXszyBaseUrl(DEFAULT_XSZY_BASE_URL);
                     localStorage.removeItem('tapnow_api_configs');
                     localStorage.removeItem('tapnow_global_key');
                     localStorage.removeItem('tapnow_asset_api_ak');
                     localStorage.removeItem('tapnow_asset_api_sk');
                     localStorage.removeItem('tapnow_ark_media_api_key');
+                    localStorage.removeItem('tapnow_xszy_base_url');
                     alert('配置已清空');
                 }
             };
@@ -4064,7 +4164,9 @@ You must design a visual composition that tells the story through **8 distinct p
                 if (status === 'success') return 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]';
                 if (status === 'error') return 'bg-red-500';
                 const config = apiConfigsMap.get(modelId);
-                return config?.key ? 'bg-zinc-400' : 'bg-zinc-700';
+                const isXszyModel = modelId.includes('seedream') || modelId.includes('seedance');
+                const hasKey = isXszyModel ? assetApiKey : config?.key;
+                return hasKey ? 'bg-zinc-400' : 'bg-zinc-700';
             };
 
             const currentSession = useMemo(() => chatSessions.find(s => s.id === currentChatId) || chatSessions[0], [chatSessions, currentChatId]);
@@ -4161,7 +4263,7 @@ You must design a visual composition that tells the story through **8 distinct p
                         audioError: null
                     } : n));
 
-                    const remoteUrl = await uploadBlobToTempHosting(file, file.name || 'audio.mp3');
+                    const remoteUrl = await uploadBlobToTempHosting(file, file.name || 'audio.mp3', null, assetApiKey);
                     setNodes(prev => prev.map(n => n.id === nodeId ? {
                         ...n,
                         content: remoteUrl,
@@ -4383,84 +4485,32 @@ You must design a visual composition that tells the story through **8 distinct p
             };
 
             // 获取 Blob 对象（兼容 HTTP URL 和 Blob URL）
-            // --- Volcengine Asset API 签名工具 ---
-            const hex = (buf) => Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-            const hmacSha256 = async (key, msg) => {
-                const cryptoKey = await crypto.subtle.importKey(
-                    'raw',
-                    typeof key === 'string' ? new TextEncoder().encode(key) : key,
-                    { name: 'HMAC', hash: 'SHA-256' },
-                    false,
-                    ['sign']
-                );
-                return await crypto.subtle.sign('HMAC', cryptoKey, new TextEncoder().encode(msg));
-            };
-            const hashSha256 = async (msg) => {
-                const buf = new TextEncoder().encode(msg);
-                return await crypto.subtle.digest('SHA-256', buf);
-            };
-            const encodeRfc3986 = (value) => encodeURIComponent(String(value))
-                .replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
-            const buildCanonicalQuery = (params) => Object.entries(params)
-                .filter(([, value]) => value !== undefined && value !== null)
-                .sort(([a], [b]) => a.localeCompare(b))
-                .map(([key, value]) => `${encodeRfc3986(key)}=${encodeRfc3986(value)}`)
-                .join('&');
-            const getAssetApiTimestamp = () => {
-                const iso = new Date().toISOString().replace(/[:-]|\.\d{3}/g, '');
-                return iso.slice(0, 15) + 'Z';
-            };
-            const callAssetApi = async (action, payload, accessKey, secretKey) => {
-                if (!accessKey || !secretKey) {
-                    throw new Error('请先在设置中配置 Asset API AK/SK');
+            // --- 玄上之音 Asset API (Bearer Token) ---
+            const callAssetApi = async (action, payload, apiKey) => {
+                if (!apiKey) {
+                    throw new Error('请先在设置中配置玄上之音 API Key');
+                }
+                const pathMap = {
+                    'CreateAssetGroup': '/v1/ark-assets/groups',
+                    'GetAssetGroup': '/v1/ark-assets/groups/get',
+                    'ListAssetGroups': '/v1/ark-assets/groups/list',
+                    'CreateAsset': '/v1/ark-assets',
+                    'GetAsset': '/v1/ark-assets/get',
+                    'ListAssets': '/v1/ark-assets/list',
+                    'DeleteAsset': '/v1/ark-assets/delete'
+                };
+                const path = pathMap[action];
+                if (!path) {
+                    throw new Error(`未知的 Asset API Action: ${action}`);
                 }
                 const body = JSON.stringify(payload || {});
-                const payloadHash = hex(await hashSha256(body));
-                const requestDate = getAssetApiTimestamp();
-                const shortDate = requestDate.slice(0, 8);
-                const canonicalQuery = buildCanonicalQuery({
-                    Action: action,
-                    Version: ASSET_API_VERSION
-                });
-                const contentType = 'application/json; charset=utf-8';
-                const canonicalHeadersList = [
-                    ['content-type', contentType],
-                    ['host', ASSET_API_HOST],
-                    ['x-content-sha256', payloadHash],
-                    ['x-date', requestDate]
-                ];
-                const canonicalHeaders = canonicalHeadersList
-                    .map(([key, value]) => `${key}:${String(value).trim()}\n`)
-                    .join('');
-                const signedHeaders = canonicalHeadersList.map(([key]) => key).join(';');
-                const canonicalRequest = [
-                    'POST',
-                    '/',
-                    canonicalQuery,
-                    canonicalHeaders,
-                    signedHeaders,
-                    payloadHash
-                ].join('\n');
-                const credentialScope = `${shortDate}/${ASSET_API_REGION}/${ASSET_API_SERVICE}/request`;
-                const stringToSign = [
-                    'HMAC-SHA256',
-                    requestDate,
-                    credentialScope,
-                    hex(await hashSha256(canonicalRequest))
-                ].join('\n');
-                const kDate = await hmacSha256(secretKey, shortDate);
-                const kRegion = await hmacSha256(kDate, ASSET_API_REGION);
-                const kService = await hmacSha256(kRegion, ASSET_API_SERVICE);
-                const kSigning = await hmacSha256(kService, 'request');
-                const signature = hex(await hmacSha256(kSigning, stringToSign));
-                const authorization = `HMAC-SHA256 Credential=${accessKey}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
-                const resp = await fetch(`${ASSET_API_BASE_URL}/?${canonicalQuery}`, {
+                const url = `${assetApiBaseUrl}${path}`;
+                addDebugLog('request', `Asset API: ${action}`, { url, method: 'POST', headers: { Authorization: 'Bearer ***' }, body: payload });
+                const resp = await fetch(url, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': contentType,
-                        'Authorization': authorization,
-                        'X-Date': requestDate,
-                        'X-Content-Sha256': payloadHash
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`
                     },
                     body
                 });
@@ -4469,8 +4519,10 @@ You must design a visual composition that tells the story through **8 distinct p
                 try {
                     data = JSON.parse(text);
                 } catch (e) {
+                    addDebugLog('error', `Asset API: ${action}`, { url, body: payload }, text, e);
                     throw new Error(text || `Asset API 返回了非 JSON 内容 (${resp.status})`);
                 }
+                addDebugLog(resp.ok ? 'response' : 'error', `Asset API: ${action}`, { url, body: payload }, data);
                 const responseError = data?.ResponseMetadata?.Error || data?.error || data?.Error;
                 if (!resp.ok) {
                     throw new Error(
@@ -4483,9 +4535,9 @@ You must design a visual composition that tells the story through **8 distinct p
                 }
                 return data;
             };
-            const fetchAssetInfo = async (assetId, accessKey, secretKey) => {
+            const fetchAssetInfo = async (assetId, apiKey) => {
                 const normalizedId = normalizeAssetId(assetId);
-                const data = await callAssetApi('GetAsset', { Id: normalizedId }, accessKey, secretKey);
+                const data = await callAssetApi('GetAsset', { Id: normalizedId }, apiKey);
                 const topLevelError = data?.ResponseMetadata?.Error || data?.Error || data?.error;
                 if (topLevelError) {
                     throw new Error(topLevelError?.Message || topLevelError?.message || JSON.stringify(topLevelError));
@@ -4502,13 +4554,13 @@ You must design a visual composition that tells the story through **8 distinct p
                     errorMessage: result?.Error?.Message || result?.error?.message || ''
                 };
             };
-            const fetchCreateAssetGroup = async (name, description, accessKey, secretKey) => {
-                const data = await callAssetApi('CreateAssetGroup', { Name: name, Description: description || '', GroupType: 'AIGC', ProjectName: ASSET_API_PROJECT_NAME }, accessKey, secretKey);
+            const fetchCreateAssetGroup = async (name, description, apiKey) => {
+                const data = await callAssetApi('CreateAssetGroup', { Name: name, Description: description || '', GroupType: 'AIGC', ProjectName: ASSET_API_PROJECT_NAME }, apiKey);
                 const result = data?.Result || data?.result || data;
                 return { id: result?.Id || result?.id };
             };
-            const fetchAssetGroupInfo = async (groupId, accessKey, secretKey) => {
-                const data = await callAssetApi('GetAssetGroup', { Id: String(groupId || '').trim() }, accessKey, secretKey);
+            const fetchAssetGroupInfo = async (groupId, apiKey) => {
+                const data = await callAssetApi('GetAssetGroup', { Id: String(groupId || '').trim() }, apiKey);
                 const topLevelError = data?.ResponseMetadata?.Error || data?.Error || data?.error;
                 if (topLevelError) {
                     throw new Error(topLevelError?.Message || topLevelError?.message || JSON.stringify(topLevelError));
@@ -4521,19 +4573,19 @@ You must design a visual composition that tells the story through **8 distinct p
                     projectName: result?.ProjectName || result?.projectName || ''
                 };
             };
-            const fetchCreateAsset = async (groupId, url, assetType, accessKey, secretKey) => {
-                const data = await callAssetApi('CreateAsset', { GroupId: groupId, URL: url, AssetType: assetType, ProjectName: ASSET_API_PROJECT_NAME }, accessKey, secretKey);
+            const fetchCreateAsset = async (groupId, url, assetType, apiKey) => {
+                const data = await callAssetApi('CreateAsset', { GroupId: groupId, URL: url, AssetType: assetType, ProjectName: ASSET_API_PROJECT_NAME }, apiKey);
                 const result = data?.Result || data?.result || data;
                 return { id: result?.Id || result?.id };
             };
-            const fetchListAssetGroups = async (accessKey, secretKey) => {
-                const data = await callAssetApi('ListAssetGroups', { Filter: { GroupType: 'AIGC' }, PageNumber: 1, PageSize: 100, ProjectName: ASSET_API_PROJECT_NAME }, accessKey, secretKey);
+            const fetchListAssetGroups = async (apiKey) => {
+                const data = await callAssetApi('ListAssetGroups', { Filter: { GroupType: 'AIGC' }, PageNumber: 1, PageSize: 100, ProjectName: ASSET_API_PROJECT_NAME }, apiKey);
                 const result = data?.Result || data?.result || data;
                 const items = result?.Items || result?.items || [];
                 return items.map(item => ({ id: item?.Id || item?.id, name: item?.Name || item?.name, description: item?.Description || item?.description }));
             };
-            const fetchListAssets = async (groupIds, accessKey, secretKey) => {
-                const data = await callAssetApi('ListAssets', { Filter: { GroupIds: groupIds, GroupType: 'AIGC' }, PageNumber: 1, PageSize: 100, ProjectName: ASSET_API_PROJECT_NAME }, accessKey, secretKey);
+            const fetchListAssets = async (groupIds, apiKey) => {
+                const data = await callAssetApi('ListAssets', { Filter: { GroupIds: groupIds, GroupType: 'AIGC' }, PageNumber: 1, PageSize: 100, ProjectName: ASSET_API_PROJECT_NAME }, apiKey);
                 const topLevelError = data?.ResponseMetadata?.Error || data?.Error || data?.error;
                 if (topLevelError) {
                     throw new Error(topLevelError?.Message || topLevelError?.message || JSON.stringify(topLevelError));
@@ -4550,8 +4602,8 @@ You must design a visual composition that tells the story through **8 distinct p
                     errorMessage: item?.Error?.Message || item?.error?.message || ''
                 }));
             };
-            const fetchDeleteAsset = async (assetId, accessKey, secretKey) => {
-                await callAssetApi('DeleteAsset', { Id: assetId }, accessKey, secretKey);
+            const fetchDeleteAsset = async (assetId, apiKey) => {
+                await callAssetApi('DeleteAsset', { Id: assetId }, apiKey);
                 return true;
             };
             const inferCloudResourceType = (rawId) => {
@@ -4566,53 +4618,40 @@ You must design a visual composition that tells the story through **8 distinct p
                 return await res.blob();
             };
 
-            const uploadBlobToTempHosting = async (blob, filename = 'asset.bin', expiryOverride = null) => {
-                // 判断文件类型：通过文件名后缀或blob.type
-                const isAudio = /\.(mp3|wav|ogg|flac|aac|m4a)$/i.test(filename) || blob.type.startsWith('audio/');
-
-                // 音频文件直接使用 Litterbox
-                if (isAudio) {
+            const uploadBlobToTempHosting = async (blob, filename = 'asset.bin', expiryOverride = null, apiKey = null) => {
+                // 首选 Litterbox
+                try {
                     return await uploadToLitterbox(blob, filename, expiryOverride);
+                } catch (litterboxError) {
+                    console.warn('Litterbox 上传失败:', litterboxError);
                 }
 
-                // 图片和视频优先尝试奶昔图床，如果配置了key的话
-                const naixiKey = tempHostingConfig.naixiKey || DEFAULT_TEMP_HOSTING_CONFIG.naixiKey;
-                if (naixiKey) {
+                // 次选玄上之音自带上传（如果有 apiKey）
+                if (apiKey) {
                     try {
-                        return await uploadToNaixi(blob, filename, naixiKey);
-                    } catch (error) {
-                        console.warn('奶昔图床上传失败，自动切换到 Litterbox:', error);
-                        // 奶昔图床失败，自动回退到 Litterbox
+                        const formData = new FormData();
+                        formData.append('file', blob, filename);
+                        const resp = await fetch(`${assetApiBaseUrl}/v1/files`, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${apiKey}`
+                            },
+                            body: formData
+                        });
+                        if (!resp.ok) {
+                            const text = await resp.text();
+                            throw new Error(`玄上之音上传失败 (${resp.status}): ${text}`);
+                        }
+                        const data = await resp.json();
+                        if (data?.url) return data.url;
+                        throw new Error('玄上之音上传未返回 URL');
+                    } catch (xszyError) {
+                        console.warn('玄上之音上传失败:', xszyError);
+                        throw new Error(`上传失败: Litterbox 和玄上之音均上传失败。${xszyError.message}`);
                     }
                 }
 
-                // 使用 Litterbox 作为备选
-                return await uploadToLitterbox(blob, filename, expiryOverride);
-            };
-
-            // 上传到奶昔图床
-            const uploadToNaixi = async (blob, filename, apiKey) => {
-                const formData = new FormData();
-                formData.append('source', blob, filename);
-
-                const response = await fetch(DEFAULT_TEMP_HOSTING_CONFIG.naixiUrl, {
-                    method: 'POST',
-                    headers: {
-                        'X-API-Key': apiKey
-                    },
-                    body: formData
-                });
-
-                if (!response.ok) {
-                    throw new Error(`奶昔图床上传失败: HTTP ${response.status}`);
-                }
-
-                const result = await response.json();
-                if (result.status_code !== 200 || !result.image?.url) {
-                    throw new Error(result.status_txt || '奶昔图床上传失败');
-                }
-
-                return result.image.url;
+                throw new Error('上传失败: Litterbox 上传失败，且未配置玄上之音 API Key 作为备用。');
             };
 
             // 上传到 Litterbox
@@ -4697,7 +4736,7 @@ You must design a visual composition that tells the story through **8 distinct p
                         return imageUrl;
                     }
                     const blob = await getBlobFromUrl(imageUrl);
-                    return await uploadBlobToTempHosting(blob, 'image.png');
+                    return await uploadBlobToTempHosting(blob, 'image.png', null, assetApiKey);
                 } catch (error) {
                     console.error('临时图床: 上传图片失败:', error);
                     return null;
@@ -5243,7 +5282,7 @@ You must design a visual composition that tells the story through **8 distinct p
                     let data;
                     try { data = JSON.parse(text); } catch (err) { setTimeout(() => pollVeoJob(jobId, taskId, baseUrl, apiKey, w, h, attempt + 1), delayMs); return; }
 
-                    console.log('[Tapnow] Veo Poll:', data);
+                    addDebugLog('response', `Veo Poll #${attempt}`, { jobId }, data, null, `veo-${jobId}`);
                     const status = data?.data?.status || data?.status || data?.data?.task_status;
                     const progress = data?.data?.progress || data?.progress || '0%';
                     const failReason = data?.data?.fail_reason || data?.fail_reason || '';
@@ -5436,7 +5475,10 @@ You must design a visual composition that tells the story through **8 distinct p
                     setHistory((prev) => prev.map((hItem) => hItem.id === taskId ? { ...hItem, status: 'generating', progress: currentProgress } : hItem));
                     setTimeout(() => pollVeoJob(jobId, taskId, baseUrl, apiKey, w, h, attempt + 1), delayMs);
                 })
-                .catch((err) => setTimeout(() => pollVeoJob(jobId, taskId, baseUrl, apiKey, w, h, attempt + 1), delayMs));
+                .catch((err) => {
+                    addDebugLog('error', `Veo Poll #${attempt}`, { jobId }, null, err, `veo-${jobId}`);
+                    setTimeout(() => pollVeoJob(jobId, taskId, baseUrl, apiKey, w, h, attempt + 1), delayMs);
+                });
             };
 
             const pollSoraJob = (jobId, taskId, baseUrl, apiKey, w, h, modelId = '', attempt = 0) => {
@@ -5484,7 +5526,7 @@ You must design a visual composition that tells the story through **8 distinct p
                         return; 
                     }
 
-                    console.log('[Tapnow] Sora/Grok Poll:', data);
+                    addDebugLog('response', `Sora/Grok Poll #${attempt}`, { jobId, modelId }, data, null, `sora-${jobId}`);
                     const status = data?.data?.status || data?.status || data?.data?.task_status || data?.task_status;
 
                     if (status === 'SUCCESS' || status === 'succeeded' || status === 'FINISHED' || status === 'completed') {
@@ -5538,6 +5580,7 @@ You must design a visual composition that tells the story through **8 distinct p
                 })
                 .catch(err => {
                     console.error('[Tapnow] Sora/Grok Poll 请求失败:', err);
+                    addDebugLog('error', `Sora/Grok Poll #${attempt}`, { jobId, modelId }, null, err, `sora-${jobId}`);
                     // 如果是网络错误，继续重试；如果是其他错误，标记为失败
                     if (attempt < maxAttempts - 5) {
                         // 前75次尝试继续重试
@@ -5563,7 +5606,8 @@ You must design a visual composition that tells the story through **8 distinct p
                     return;
                 }
 
-                fetch(`${baseUrl}/contents/generations/tasks/${encodeURIComponent(jobId)}`, {
+                const pollUrl = `${baseUrl}/contents/generations/tasks/${encodeURIComponent(jobId)}`;
+                fetch(pollUrl, {
                     method: 'GET',
                     headers: { Authorization: `Bearer ${apiKey}` },
                 })
@@ -5572,9 +5616,29 @@ You must design a visual composition that tells the story through **8 distinct p
                     return resp.json();
                 })
                 .then((data) => {
-                    const status = data?.status;
-                    if (status === 'succeeded') {
-                        const videoUrl = data?.video_url || data?.url || data?.content?.video_url || data?.data?.video_url || data?.data?.url || data?.task_result?.video_url;
+                    addDebugLog('response', `Seedance Poll #${attempt}`, { url: pollUrl, jobId }, data, null, `seedance-${jobId}`);
+                    // 支持多层嵌套的状态字段
+                    const rawStatus = data?.status ?? data?.data?.status ?? data?.task_status ?? data?.data?.task_status;
+                    const status = String(rawStatus || '').toLowerCase().trim();
+                    
+                    // 支持多种成功/失败状态值
+                    const isSucceeded = ['succeeded', 'success', 'completed', 'done', 'finished'].includes(status);
+                    const isFailed = ['failed', 'failure', 'error', 'rejected', 'cancelled', 'canceled'].includes(status);
+                    
+                    if (isSucceeded) {
+                        // 玄上之音 Seedance 视频生成任务返回格式适配：
+                        // - data.data.result_url: 玄上之音直链（最优先）
+                        // - data.data.data.content.video_url: 上游原始视频链接
+                        const videoUrl = data?.data?.result_url
+                            || data?.data?.data?.content?.video_url
+                            || data?.video_url 
+                            || data?.url 
+                            || data?.content?.video_url 
+                            || data?.data?.video_url 
+                            || data?.data?.url 
+                            || data?.task_result?.video_url
+                            || data?.result?.video_url
+                            || data?.data?.result?.video_url;
                         if (!videoUrl) {
                             setHistory(prev => prev.map(hItem => hItem.id === taskId ? { ...hItem, status: 'failed', errorMsg: '未找到视频URL' } : hItem));
                             return;
@@ -5603,17 +5667,27 @@ You must design a visual composition that tells the story through **8 distinct p
                         return;
                     }
 
-                    if (status === 'failed') {
-                        const errorMsg = data?.error?.message || data?.message || '任务失败';
+                    if (isFailed) {
+                        const errorMsg = data?.data?.fail_reason || data?.error?.message || data?.data?.error?.message || data?.message || data?.data?.message || '任务失败';
                         setHistory(prev => prev.map(hItem => hItem.id === taskId ? { ...hItem, status: 'failed', errorMsg } : hItem));
                         return;
                     }
 
-                    setHistory(prev => prev.map(hItem => hItem.id === taskId ? { ...hItem, status: 'generating', progress: Math.min(95, (hItem.progress || 10) + 2) } : hItem));
+                    // 提取进度：支持多层嵌套（字符串如 "50%" 或数字）
+                    const rawProgress = data?.progress ?? data?.data?.progress;
+                    const progress = typeof rawProgress === 'number' ? rawProgress : (typeof rawProgress === 'string' ? parseInt(rawProgress, 10) : Math.min(95, ((historyMap.get(taskId)?.progress || 10) + 2)));
+                    
+                    // 实时计算耗时
+                    const now = Date.now();
+                    const historyItem = historyMap.get(taskId);
+                    const durationMs = now - (historyItem?.startTime || now);
+                    
+                    setHistory(prev => prev.map(hItem => hItem.id === taskId ? { ...hItem, status: 'generating', progress, durationMs } : hItem));
                     setTimeout(() => pollSeedanceJob(jobId, taskId, baseUrl, apiKey, w, h, attempt + 1), delayMs);
                 })
                 .catch(err => {
                     console.error('[Tapnow] Seedance Poll 请求失败:', err);
+                    addDebugLog('error', `Seedance Poll #${attempt}`, { url: pollUrl, jobId }, null, err, `seedance-${jobId}`);
                     if (attempt < maxAttempts - 5) {
                         setTimeout(() => pollSeedanceJob(jobId, taskId, baseUrl, apiKey, w, h, attempt + 1), delayMs);
                     } else {
@@ -5654,6 +5728,7 @@ You must design a visual composition that tells the story through **8 distinct p
                         return;
                     }
 
+                    addDebugLog('response', `RH Image Poll #${attempt}`, { taskId: remoteTaskId }, data, null, `rh-${remoteTaskId}`);
                     const status = (data?.status || '').toUpperCase();
                     if (status === 'SUCCESS') {
                         const imageUrls = (data?.results || []).map(item => item?.url).filter(Boolean);
@@ -5702,6 +5777,7 @@ You must design a visual composition that tells the story through **8 distinct p
                 })
                 .catch((err) => {
                     console.error('[RH Image] Poll Error:', err);
+                    addDebugLog('error', `RH Image Poll #${attempt}`, { taskId: remoteTaskId }, null, err, `rh-${remoteTaskId}`);
                     if (attempt >= 3) {
                         setHistory((prev) => prev.map((hItem) =>
                             hItem.id === taskId
@@ -5752,7 +5828,7 @@ You must design a visual composition that tells the story through **8 distinct p
                         return; 
                     }
 
-                    console.log('[Async Image] Poll:', data);
+                    addDebugLog('response', `Async Image Poll #${attempt}`, { taskId: taskIdForPoll }, data, null, `async-${taskIdForPoll}`);
                     
                     // 根据API规范，响应格式可能有多种：
                     // 1. { code, message, data: { status, images: [...] } }
@@ -6273,7 +6349,8 @@ You must design a visual composition that tells the story through **8 distinct p
                     ? requestedModelId
                     : (type === 'image' ? fallbackImageModelId : 'seedance-2.0');
                 const config = apiConfigsMap.get(modelId);
-                const apiKey = config?.key;
+                const isXszyModel = modelId.includes('seedream') || modelId.includes('seedance');
+                const apiKey = isXszyModel ? assetApiKey : config?.key;
                 const baseUrl = (config?.url || DEFAULT_BASE_URL).replace(/\/+$/, '');
 
                 if (!apiKey) { alert('请先在设置中配置 API Key'); setSettingsOpen(true); return; }
@@ -6570,19 +6647,27 @@ You must design a visual composition that tells the story through **8 distinct p
                             };
 
                             const rhImages = await Promise.all(connectedImages.map(normalizeRhInput));
-                            const rhResolution = String((resolution && resolution !== 'Auto' ? resolution : '2K')).toLowerCase();
                             const rhAspectRatio = ratio === 'Auto' ? '1:1' : ratio;
-                            const rhModelPath = modelId.includes('rh-image-pro') ? 'rhart-image-n-pro' : 'rhart-image-n-g31-flash';
+
+                            // 全能图片 G-2.0 使用独立的路径和参数体系
+                            const isRhG2 = modelId.includes('rh-image-g-2');
+                            const rhModelPath = isRhG2
+                                ? 'rhart-image-g-2'
+                                : (modelId.includes('rh-image-pro') ? 'rhart-image-n-pro' : 'rhart-image-n-g31-flash');
                             const rhAction = rhImages.length > 0
-                                ? (modelId.includes('rh-image-pro') ? 'edit' : 'image-to-image')
+                                ? (isRhG2 ? 'image-to-image' : (modelId.includes('rh-image-pro') ? 'edit' : 'image-to-image'))
                                 : 'text-to-image';
 
                             endpoint = `${baseUrl}/${rhModelPath}/${rhAction}`;
                             payload = {
                                 prompt: prompt.trim(),
-                                aspectRatio: rhAspectRatio,
-                                resolution: rhResolution
+                                aspectRatio: rhAspectRatio
                             };
+                            // G-2.0 以外的 RH 模型支持 resolution 参数
+                            if (!isRhG2) {
+                                const rhResolution = String((resolution && resolution !== 'Auto' ? resolution : '2K')).toLowerCase();
+                                payload.resolution = rhResolution;
+                            }
                             if (rhImages.length > 0) {
                                 payload.imageUrls = rhImages;
                             }
@@ -6614,6 +6699,7 @@ You must design a visual composition that tells the story through **8 distinct p
                         
                         const requestBody = useMultipart ? payload : JSON.stringify(payload);
                         
+                        addDebugLog('request', 'Image Generate', { url: fullUrl, method: 'POST', headers: { Authorization: 'Bearer ***' }, model: modelId, payload: useMultipart ? '[FormData]' : payload });
                         let resp;
                         try {
                             resp = await fetch(fullUrl, {
@@ -6622,6 +6708,7 @@ You must design a visual composition that tells the story through **8 distinct p
                                 body: requestBody,
                             });
                         } catch (fetchError) {
+                            addDebugLog('error', 'Image Generate', { url: fullUrl, model: modelId }, null, fetchError);
                             throw new Error(`网络请求失败：${fetchError.message}`);
                         }
                         
@@ -6734,15 +6821,19 @@ You must design a visual composition that tells the story through **8 distinct p
                             : connectedImages.map((img, idx) => ({ type: 'image', url: img, index: idx + 1, token: `【图片${idx + 1}】` }));
 
                         for (const asset of referenceAssets) {
-                            if (!asset?.url) continue;
+                            if (!asset?.url && !asset?.assetId) continue;
                             let remoteUrl = asset.url;
-                            // seedance-asset 节点直接使用 asset:// 协议，跳过上传转换
+                            // seedance-asset 节点：优先使用 HTTP URL，若为空则回退到 asset:// 协议
+                            if (asset.isSeedanceAsset && !remoteUrl && asset.assetId) {
+                                remoteUrl = `asset://${asset.assetId}`;
+                            }
+                            // 非 seedance-asset 节点：本地资源需要上传转换为 HTTP URL
                             if (!asset.isSeedanceAsset && !remoteUrl.startsWith('http://') && !remoteUrl.startsWith('https://')) {
                                 if (asset.type === 'image') {
                                     remoteUrl = await uploadImageToGetHttpUrl(asset.url);
                                 } else {
                                     const blob = await getBlobFromUrl(asset.url);
-                                    remoteUrl = await uploadBlobToTempHosting(blob, `${asset.type}-${asset.index || 1}`);
+                                    remoteUrl = await uploadBlobToTempHosting(blob, `${asset.type}-${asset.index || 1}`, null, assetApiKey);
                                 }
                             }
 
@@ -6760,16 +6851,17 @@ You must design a visual composition that tells the story through **8 distinct p
                         }
 
                             const payload = {
-                                model: config?.modelName || 'doubao-seedance-2-0-fast-260128',
+                                model: config?.modelName || 'Doubao-Seedance-2.0-fast',
                                 content,
                                 generate_audio: generateAudio,
                                 resolution: resolution || '480p',
-                                ratio: ratio || '16:9',
+                                ratio: (ratio && ratio !== 'Auto') ? ratio : '16:9',
                                 duration: durationValueNum,
                                 seed: seedValue,
                                 watermark: false
                             };
 
+                            addDebugLog('request', 'Seedance Submit', { endpoint, model: payload.model, payload });
                             const resp = await fetch(endpoint, {
                                 method: 'POST',
                                 headers: {
@@ -6783,8 +6875,10 @@ You must design a visual composition that tells the story through **8 distinct p
                             try {
                                 data = JSON.parse(text);
                             } catch (e) {
+                                addDebugLog('error', 'Seedance Submit', { endpoint, payload }, text, e);
                                 throw new Error(`响应解析失败: ${text.substring(0, 200)}`);
                             }
+                            addDebugLog(resp.ok ? 'response' : 'error', 'Seedance Submit', { endpoint, payload }, data);
 
                             if (!resp.ok) {
                                 throw new Error(data?.error?.message || data?.message || text || `Seedance API error: ${resp.status}`);
@@ -7215,10 +7309,15 @@ You must design a visual composition that tells the story through **8 distinct p
                              }
                         }
 
+                        addDebugLog('request', 'Video Generate', { endpoint, model: modelId, payload: body instanceof FormData ? '[FormData]' : payload });
                         const resp = await fetch(endpoint, { method: 'POST', headers: body instanceof FormData ? { Authorization: headers.Authorization } : headers, body });
                         const text = await resp.text();
-                        if (!resp.ok) throw new Error(text || `Video API error: ${resp.status}`);
+                        if (!resp.ok) {
+                            addDebugLog('error', 'Video Generate', { endpoint, model: modelId }, text, `HTTP ${resp.status}`);
+                            throw new Error(text || `Video API error: ${resp.status}`);
+                        }
                         const data = JSON.parse(text);
+                        addDebugLog('response', 'Video Generate', { endpoint, model: modelId }, data);
                         
                         const immediateUrl = data?.video_url || data?.url || data?.data?.video_url;
                         if (immediateUrl) { 
@@ -8296,8 +8395,8 @@ You must design a visual composition that tells the story through **8 distinct p
                 const files = Array.from(e.dataTransfer.files);
                 const mediaFiles = files.filter(f => f.type.startsWith('image/') || f.type.startsWith('video/') || f.type.startsWith('audio/'));
                 if (!mediaFiles.length) return;
-                if (!assetApiKey || !assetApiSecret) {
-                    alert('请先在设置中配置 Asset API AK/SK');
+                if (!assetApiKey) {
+                    alert('请先在设置中配置玄上之音 API Key');
                     return;
                 }
                 for (const file of mediaFiles) {
@@ -8319,8 +8418,8 @@ You must design a visual composition that tells the story through **8 distinct p
                 };
                 setSeedanceCharacterLibrary(prev => prev.map(g => g.id === group.id ? { ...g, assets: [...g.assets, pendingAsset] } : g));
                 try {
-                    const remoteUrl = await uploadBlobToTempHosting(file, file.name || 'asset.bin');
-                    const { id: assetId } = await fetchCreateAsset(group.id, remoteUrl, assetType, assetApiKey, assetApiSecret);
+                    const remoteUrl = await uploadBlobToTempHosting(file, file.name || 'asset.bin', null, assetApiKey);
+                    const { id: assetId } = await fetchCreateAsset(group.id, remoteUrl, assetType, assetApiKey);
                     const createdAsset = {
                         id: assetId,
                         name: file.name || assetId,
@@ -8356,7 +8455,7 @@ You must design a visual composition that tells the story through **8 distinct p
                 for (let i = 0; i < maxAttempts; i++) {
                     await new Promise(r => setTimeout(r, 3000));
                     try {
-                        const info = await fetchAssetInfo(assetId, assetApiKey, assetApiSecret);
+                        const info = await fetchAssetInfo(assetId, assetApiKey);
                         if (info.status === 'Active' || info.status === 'Failed') {
                             setSeedanceCharacterLibrary(prev => prev.map(g => {
                                 if (g.id !== groupId) return g;
@@ -8404,9 +8503,9 @@ You must design a visual composition that tells the story through **8 distinct p
             };
             const deleteAsset = async (groupId, assetId) => {
                 const shouldDeleteCloud = confirm('同时删除云端素材吗？\n确定：删除云端+本地\n取消：仅删除本地记录');
-                if (shouldDeleteCloud && assetApiKey && assetApiSecret) {
+                if (shouldDeleteCloud && assetApiKey) {
                     try {
-                        await fetchDeleteAsset(assetId, assetApiKey, assetApiSecret);
+                        await fetchDeleteAsset(assetId, assetApiKey);
                     } catch (err) {
                         alert(`云端删除失败: ${err.message}`);
                     }
@@ -8417,8 +8516,8 @@ You must design a visual composition that tells the story through **8 distinct p
                 }));
             };
             const pullCloudGroup = async (groupId) => {
-                if (!assetApiKey || !assetApiSecret) {
-                    alert('请先在设置中配置 Asset API AK/SK');
+                if (!assetApiKey) {
+                    alert('请先在设置中配置玄上之音 API Key');
                     return;
                 }
                 setPullCloudSubmitting(true);
@@ -8426,11 +8525,11 @@ You must design a visual composition that tells the story through **8 distinct p
                 try {
                     let groupInfo = null;
                     try {
-                        groupInfo = await fetchAssetGroupInfo(groupId, assetApiKey, assetApiSecret);
+                        groupInfo = await fetchAssetGroupInfo(groupId, assetApiKey);
                     } catch (groupErr) {
                         console.warn('获取组详情失败，回退到本地占位名称:', groupErr);
                     }
-                    const assets = await fetchListAssets([groupId], assetApiKey, assetApiSecret);
+                    const assets = await fetchListAssets([groupId], assetApiKey);
                     if (!assets.length) {
                         alert('该 Group ID 下未找到任何素材');
                         return;
@@ -8476,18 +8575,18 @@ You must design a visual composition that tells the story through **8 distinct p
                 }
             };
             const pullCloudAsset = async (assetId) => {
-                if (!assetApiKey || !assetApiSecret) {
-                    alert('请先在设置中配置 Asset API AK/SK');
+                if (!assetApiKey) {
+                    alert('请先在设置中配置玄上之音 API Key');
                     return;
                 }
                 setPullCloudSubmitting(true);
                 try {
-                    const info = await fetchAssetInfo(assetId, assetApiKey, assetApiSecret);
+                    const info = await fetchAssetInfo(assetId, assetApiKey);
                     const groupId = info.groupId || info.GroupId || 'unknown-group';
                     let groupInfo = null;
                     if (groupId && groupId !== 'unknown-group') {
                         try {
-                            groupInfo = await fetchAssetGroupInfo(groupId, assetApiKey, assetApiSecret);
+                            groupInfo = await fetchAssetGroupInfo(groupId, assetApiKey);
                         } catch (groupErr) {
                             console.warn('获取素材所属组详情失败，回退到占位名称:', groupErr);
                         }
@@ -11475,9 +11574,9 @@ You must design a visual composition that tells the story through **8 distinct p
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <button
-                                                disabled={node.settings?.isFetching || !node.settings?.assetId || !assetApiKey || !assetApiSecret}
+                                                disabled={node.settings?.isFetching || !node.settings?.assetId || !assetApiKey}
                                                 className={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${
-                                                    node.settings?.isFetching || !node.settings?.assetId || !assetApiKey || !assetApiSecret
+                                                    node.settings?.isFetching || !node.settings?.assetId || !assetApiKey
                                                         ? 'bg-zinc-700 text-zinc-500 cursor-not-allowed'
                                                         : 'bg-blue-600 hover:bg-blue-500 text-white'
                                                 }`}
@@ -11487,7 +11586,7 @@ You must design a visual composition that tells the story through **8 distinct p
                                                     if (!id) return;
                                                     updateNodeSettings(node.id, { isFetching: true, fetchError: '', assetId: id });
                                                     try {
-                                                        const info = await fetchAssetInfo(id, assetApiKey, assetApiSecret);
+                                                        const info = await fetchAssetInfo(id, assetApiKey);
                                                         updateNodeSettings(node.id, {
                                                             assetId: info.id || id,
                                                             assetType: info.assetType || 'Image',
@@ -11528,8 +11627,8 @@ You must design a visual composition that tells the story through **8 distinct p
                                                     下载
                                                 </button>
                                             )}
-                                            {!assetApiKey || !assetApiSecret ? (
-                                                <span className="text-[10px] text-zinc-500">需配置 Asset API AK/SK</span>
+                                            {!assetApiKey ? (
+                                                <span className="text-[10px] text-zinc-500">需配置玄上之音 API Key</span>
                                             ) : node.settings?.fetchError ? (
                                                 <span className="text-[10px] text-red-500 truncate max-w-[120px]" title={node.settings.fetchError}>{node.settings.fetchError}</span>
                                             ) : node.settings?.assetStatus === 'Failed' && node.settings?.assetErrorMessage ? (
@@ -13113,6 +13212,10 @@ You must design a visual composition that tells the story through **8 distinct p
                                                     onBlur={() => {
                                                         syncVideoPromptFromEditor(node.id);
                                                     }}
+                                                    onWheel={(e) => {
+                                                        // 阻止浏览器默认滚动行为，让画布滚轮缩放正常工作
+                                                        e.preventDefault();
+                                                    }}
                                                 />
                                             </div>
                                         ) : isImageGenerationNode ? (
@@ -13166,6 +13269,10 @@ You must design a visual composition that tells the story through **8 distinct p
                                                     onFocus={() => saveImagePromptSelection(node.id)}
                                                     onBlur={() => {
                                                         syncImagePromptFromEditor(node.id);
+                                                    }}
+                                                    onWheel={(e) => {
+                                                        // 阻止浏览器默认滚动行为，让画布滚轮缩放正常工作
+                                                        e.preventDefault();
                                                     }}
                                                 />
                                             </div>
@@ -13325,7 +13432,9 @@ You must design a visual composition that tells the story through **8 distinct p
                                                                         nextSettings.generateAudio = true;
                                                                     } else if (m.id.startsWith('rh-image')) {
                                                                         nextSettings.ratio = '1:1';
-                                                                        nextSettings.resolution = '2K';
+                                                                        if (!m.id.includes('rh-image-g-2')) {
+                                                                            nextSettings.resolution = '2K';
+                                                                        }
                                                                     }
                                                                     updateNodeSettings(node.id, nextSettings);
                                                                     setActiveDropdown(null);
@@ -13410,7 +13519,7 @@ You must design a visual composition that tells the story through **8 distinct p
                                                             }`}
                                                             onMouseDown={e => e.stopPropagation()}
                                                         >
-                                                            {VIDEO_RES_OPTIONS.map(r => (
+                                                            {getVideoResolutionsForModel(node.settings?.model).map(r => (
                                                                 <button
                                                                     key={r}
                                                                     onClick={() => {
@@ -13431,39 +13540,34 @@ You must design a visual composition that tells the story through **8 distinct p
                                                 </div>
                                             ) : null}
 
-                                            {isImageGenerationNode ? (
-                                                <div className="relative">
-                                                    <button
-                                                        onClick={e => { e.stopPropagation(); setActiveDropdown(activeDropdown?.type === 'res' && activeDropdown.nodeId === node.id ? null : { nodeId: node.id, type: 'res' }); }}
-                                                        className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] border ${
-                                                            theme === 'dark'
-                                                                ? 'bg-zinc-800/50 hover:bg-zinc-800 text-zinc-400 border-zinc-700/50'
-                                                                : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-600 border-zinc-300'
-                                                        }`}
-                                                    >
-                                                        {(() => {
-                                                            const currentModel = apiConfigsMap.get(node.settings?.model);
-                                                            const modelId = currentModel?.id || currentModel?.modelName || '';
-                                                            const availableResolutions = getResolutionsForModel(modelId);
-                                                            const currentResolution = node.settings?.resolution || 'Auto';
-                                                            // 如果当前分辨率不在可用选项中，使用第一个可用选项作为显示值
-                                                            const displayResolution = availableResolutions.includes(currentResolution) 
-                                                                ? currentResolution 
-                                                                : (availableResolutions[0] || 'Auto');
-                                                            // 如果当前分辨率不在可用选项中，自动更新
-                                                            if (!availableResolutions.includes(currentResolution) && availableResolutions.length > 0) {
-                                                                setTimeout(() => {
-                                                                    updateNodeSettings(node.id, { resolution: availableResolutions[0] });
-                                                                }, 0);
-                                                            }
-                                                            return displayResolution;
-                                                        })()}
-                                                    </button>
-                                                    {activeDropdown?.nodeId === node.id && activeDropdown.type === 'res' && (() => {
-                                                        const currentModel = apiConfigsMap.get(node.settings?.model);
-                                                        const modelId = currentModel?.id || currentModel?.modelName || '';
-                                                        const availableResolutions = getResolutionsForModel(modelId);
-                                                        return (
+                                            {isImageGenerationNode ? (() => {
+                                                const currentModel = apiConfigsMap.get(node.settings?.model);
+                                                const modelId = currentModel?.id || currentModel?.modelName || '';
+                                                const availableResolutions = getResolutionsForModel(modelId);
+                                                const currentResolution = node.settings?.resolution || 'Auto';
+                                                if (availableResolutions.length === 0) return null;
+                                                // 如果当前分辨率不在可用选项中，自动更新
+                                                if (!availableResolutions.includes(currentResolution)) {
+                                                    setTimeout(() => {
+                                                        updateNodeSettings(node.id, { resolution: availableResolutions[0] });
+                                                    }, 0);
+                                                }
+                                                const displayResolution = availableResolutions.includes(currentResolution) 
+                                                    ? currentResolution 
+                                                    : (availableResolutions[0] || 'Auto');
+                                                return (
+                                                    <div className="relative">
+                                                        <button
+                                                            onClick={e => { e.stopPropagation(); setActiveDropdown(activeDropdown?.type === 'res' && activeDropdown.nodeId === node.id ? null : { nodeId: node.id, type: 'res' }); }}
+                                                            className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] border ${
+                                                                theme === 'dark'
+                                                                    ? 'bg-zinc-800/50 hover:bg-zinc-800 text-zinc-400 border-zinc-700/50'
+                                                                    : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-600 border-zinc-300'
+                                                            }`}
+                                                        >
+                                                            {displayResolution}
+                                                        </button>
+                                                        {activeDropdown?.nodeId === node.id && activeDropdown.type === 'res' && (
                                                             <div
                                                                 className={`absolute bottom-full right-0 mb-1 w-24 rounded-lg shadow-xl p-1 z-[60] border ${
                                                                     theme === 'dark'
@@ -13489,10 +13593,10 @@ You must design a visual composition that tells the story through **8 distinct p
                                                                     </button>
                                                                 ))}
                                                             </div>
-                                                        );
-                                                    })()}
-                                                </div>
-                                            ) : (
+                                                        )}
+                                                    </div>
+                                                );
+                                            })() : (
                                                 <>
                                                 <input
                                                     type="number"
@@ -13572,7 +13676,7 @@ You must design a visual composition that tells the story through **8 distinct p
                         </div>
                     </div>
                 );
-            }, [selectedNodeId, selectedNodeIds, hoverTargetId, nodeConnectedStatus, adjacentNodesCache, apiConfigsMap, getConnectedInputImages, getConnectedReferenceAssets, theme, view, dragNodeId, connectingSource, connectingTarget, connectingInputType, deleteNode, handleNodeMouseUp, screenToWorld, setDragNodeId, setSelectedNodeId, setSelectedNodeIds, setActiveDropdown, setHoverTargetId, setConnectingSource, setConnectingTarget, setConnectingInputType, setResizingNodeId, setLightboxItem, isVideoUrl, updateNodeSettings, getConnectedTextNodes, startGeneration, getDefaultDurationForModel, getDefaultDurationsForModel, getConnectedGenNodes, getConnectedVideoInputNode, getConnectedVideoAnalyzeNode, activeDropdown, videoMentionSelectedIndex, imageMentionSelectedIndex, openVideoMentionPopup, closeVideoMentionPopup, insertVideoMentionToken, openImageMentionPopup, closeImageMentionPopup, insertImageMentionToken, formatVideoPromptMentions, formatImagePromptMentions, normalizeVideoPromptState, normalizeImagePromptState, syncVideoPromptFromEditor, syncImagePromptFromEditor, saveVideoPromptSelection, saveImagePromptSelection, serializeVideoPromptNode, serializeImagePromptNode, assetApiKey, assetApiSecret]);
+            }, [selectedNodeId, selectedNodeIds, hoverTargetId, nodeConnectedStatus, adjacentNodesCache, apiConfigsMap, getConnectedInputImages, getConnectedReferenceAssets, theme, view, dragNodeId, connectingSource, connectingTarget, connectingInputType, deleteNode, handleNodeMouseUp, screenToWorld, setDragNodeId, setSelectedNodeId, setSelectedNodeIds, setActiveDropdown, setHoverTargetId, setConnectingSource, setConnectingTarget, setConnectingInputType, setResizingNodeId, setLightboxItem, isVideoUrl, updateNodeSettings, getConnectedTextNodes, startGeneration, getDefaultDurationForModel, getDefaultDurationsForModel, getConnectedGenNodes, getConnectedVideoInputNode, getConnectedVideoAnalyzeNode, activeDropdown, videoMentionSelectedIndex, imageMentionSelectedIndex, openVideoMentionPopup, closeVideoMentionPopup, insertVideoMentionToken, openImageMentionPopup, closeImageMentionPopup, insertImageMentionToken, formatVideoPromptMentions, formatImagePromptMentions, normalizeVideoPromptState, normalizeImagePromptState, syncVideoPromptFromEditor, syncImagePromptFromEditor, saveVideoPromptSelection, saveImagePromptSelection, serializeVideoPromptNode, serializeImagePromptNode, assetApiKey]);
 
             // 高性能模式：当节点数量超过 50 时自动启用
             const isPerfMode = nodes.length > 50;
@@ -13796,13 +13900,14 @@ You must design a visual composition that tells the story through **8 distinct p
                             >
                                 <Layout size={18} />
                             </button>
-                            {[ { id: 'select', icon: MousePointer2 }, { id: 'history', icon: History }, { id: 'characters', icon: Users } ].map((tool) => (
+                            {[ { id: 'select', icon: MousePointer2 }, { id: 'history', icon: History }, { id: 'characters', icon: Users }, { id: 'debug', icon: Bug } ].map((tool) => (
                                 <button
                                     key={tool.id}
                                     onClick={() => { 
                                         setActiveTool(tool.id); 
                                         if (tool.id === 'history') setHistoryOpen(!historyOpen);
                                         if (tool.id === 'characters') setCharactersOpen(!charactersOpen);
+                                        if (tool.id === 'debug') setDebugOpen(!debugOpen);
                                     }}
                                     className={`p-2.5 rounded-lg transition-all ${
                                         activeTool === tool.id
@@ -13927,10 +14032,12 @@ You must design a visual composition that tells the story through **8 distinct p
                                                     else pollSoraJob(item.remoteTaskId, item.id, item.apiConfig.baseUrl, item.apiConfig.apiKey, item.width, item.height, item.apiConfig.modelId || '');
                                                 }
                                             }}
+                                            onAbort={abortHistoryTask}
                                             Loader2={Loader2}
                                             Trash2={Trash2}
                                             RefreshCw={RefreshCw}
                                             Download={Download}
+                                            X={X}
                                         />
                                     ))}
                                 </div>
@@ -14169,6 +14276,149 @@ You must design a visual composition that tells the story through **8 distinct p
                             </div>
                         )}
 
+                        {/* Debug Panel */}
+                        {debugOpen && (
+                            <div
+                                className={`w-96 z-30 flex flex-col animate-in slide-in-from-left border-r transition-colors duration-300 ${
+                                    theme === 'dark' ? 'bg-[#121214] border-zinc-800' : 'bg-zinc-50 border-zinc-200'
+                                }`}
+                            >
+                                <div
+                                    className={`p-3 border-b flex justify-between items-center ${
+                                        theme === 'dark' ? 'border-zinc-800' : 'border-zinc-200'
+                                    }`}
+                                >
+                                    <h3 className={`font-bold text-xs ${theme === 'dark' ? 'text-zinc-300' : 'text-zinc-700'}`}>
+                                        调试日志
+                                    </h3>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => setDebugLogs([])}
+                                            className={`px-2 py-1 text-[10px] rounded transition-colors ${
+                                                theme === 'dark'
+                                                    ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300'
+                                                    : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-700'
+                                            }`}
+                                        >
+                                            清空
+                                        </button>
+                                        <button onClick={() => setDebugOpen(false)}>
+                                            <X size={12} className={theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'} />
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-2">
+                                    {debugLogs.length === 0 && (
+                                        <div className={`text-center text-xs py-8 ${theme === 'dark' ? 'text-zinc-600' : 'text-zinc-400'}`}>
+                                            暂无调试日志
+                                        </div>
+                                    )}
+                                    {debugLogs.map((log) => {
+                                        if (log.type === 'group') {
+                                            const lastChild = log.children[0];
+                                            const hasError = log.children.some(c => c.type === 'error');
+                                            return (
+                                                <details key={log.id} className={`rounded border text-[10px] font-mono ${
+                                                    theme === 'dark' ? 'bg-zinc-950 border-zinc-800' : 'bg-white border-zinc-200'
+                                                }`}>
+                                                    <summary className="p-2 cursor-pointer flex items-center gap-2">
+                                                        <span className={`px-1 py-0.5 rounded text-[9px] font-bold ${
+                                                            hasError
+                                                                ? 'bg-red-900/40 text-red-400'
+                                                                : lastChild?.type === 'response'
+                                                                    ? 'bg-emerald-900/40 text-emerald-400'
+                                                                    : 'bg-blue-900/40 text-blue-400'
+                                                        }`}>
+                                                            GROUP
+                                                        </span>
+                                                        <span className={`truncate flex-1 ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                                                            {log.label} ({log.children.length} 条)
+                                                        </span>
+                                                        <span className={theme === 'dark' ? 'text-zinc-600' : 'text-zinc-400'}>{log.time}</span>
+                                                    </summary>
+                                                    <div className="border-t border-zinc-800/50 space-y-1 p-1 max-h-64 overflow-y-auto custom-scrollbar">
+                                                        {log.children.map((child) => (
+                                                            <div key={child.id} className={`rounded p-1.5 ${theme === 'dark' ? 'bg-zinc-900/50' : 'bg-zinc-50'}`}>
+                                                                <div className="flex items-center gap-2 mb-1">
+                                                                    <span className={`px-1 py-0.5 rounded text-[9px] font-bold ${
+                                                                        child.type === 'error'
+                                                                            ? 'bg-red-900/40 text-red-400'
+                                                                            : child.type === 'response'
+                                                                                ? 'bg-emerald-900/40 text-emerald-400'
+                                                                                : 'bg-blue-900/40 text-blue-400'
+                                                                    }`}>
+                                                                        {child.type.toUpperCase()}
+                                                                    </span>
+                                                                    <span className={`truncate flex-1 ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}`}>{child.label}</span>
+                                                                    <span className={theme === 'dark' ? 'text-zinc-600' : 'text-zinc-400'}>{child.time}</span>
+                                                                </div>
+                                                                {child.error && <div className="text-red-400 mb-1 whitespace-pre-wrap">{child.error}</div>}
+                                                                {child.request && (
+                                                                    <details className="mb-1">
+                                                                        <summary className={`cursor-pointer ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-500'}`}>Request</summary>
+                                                                        <pre className={`mt-1 p-1 rounded overflow-x-auto whitespace-pre-wrap break-all text-[9px] ${theme === 'dark' ? 'bg-zinc-900 text-zinc-400' : 'bg-zinc-100 text-zinc-600'}`}>{child.request}</pre>
+                                                                    </details>
+                                                                )}
+                                                                {child.response && (
+                                                                    <details>
+                                                                        <summary className={`cursor-pointer ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-500'}`}>Response</summary>
+                                                                        <pre className={`mt-1 p-1 rounded overflow-x-auto whitespace-pre-wrap break-all text-[9px] ${theme === 'dark' ? 'bg-zinc-900 text-zinc-400' : 'bg-zinc-100 text-zinc-600'}`}>{child.response}</pre>
+                                                                    </details>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </details>
+                                            );
+                                        }
+                                        return (
+                                            <div
+                                                key={log.id}
+                                                className={`rounded border p-2 text-[10px] font-mono ${
+                                                    theme === 'dark' ? 'bg-zinc-950 border-zinc-800' : 'bg-white border-zinc-200'
+                                                }`}
+                                            >
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className={`px-1 py-0.5 rounded text-[9px] font-bold ${
+                                                        log.type === 'error'
+                                                            ? 'bg-red-900/40 text-red-400'
+                                                            : log.type === 'response'
+                                                                ? 'bg-emerald-900/40 text-emerald-400'
+                                                                : 'bg-blue-900/40 text-blue-400'
+                                                    }`}>
+                                                        {log.type.toUpperCase()}
+                                                    </span>
+                                                    <span className={`truncate flex-1 ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                                                        {log.label}
+                                                    </span>
+                                                    <span className={theme === 'dark' ? 'text-zinc-600' : 'text-zinc-400'}>{log.time}</span>
+                                                </div>
+                                                {log.error && (
+                                                    <div className="text-red-400 mb-1 whitespace-pre-wrap">{log.error}</div>
+                                                )}
+                                                {log.request && (
+                                                    <details className="mb-1">
+                                                        <summary className={`cursor-pointer ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-500'}`}>Request</summary>
+                                                        <pre className={`mt-1 p-1.5 rounded overflow-x-auto whitespace-pre-wrap break-all ${theme === 'dark' ? 'bg-zinc-900 text-zinc-400' : 'bg-zinc-100 text-zinc-600'}`}>
+                                                            {log.request}
+                                                        </pre>
+                                                    </details>
+                                                )}
+                                                {log.response && (
+                                                    <details>
+                                                        <summary className={`cursor-pointer ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-500'}`}>Response</summary>
+                                                        <pre className={`mt-1 p-1.5 rounded overflow-x-auto whitespace-pre-wrap break-all ${theme === 'dark' ? 'bg-zinc-900 text-zinc-400' : 'bg-zinc-100 text-zinc-600'}`}>
+                                                            {log.response}
+                                                        </pre>
+                                                    </details>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+
                         {/* Create Group Modal */}
                         {createCharacterOpen && (
                             <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center" onClick={() => setCreateCharacterOpen(false)}>
@@ -14244,13 +14494,13 @@ You must design a visual composition that tells the story through **8 distinct p
                                                         alert('请输入组名称');
                                                         return;
                                                     }
-                                                    if (!assetApiKey || !assetApiSecret) {
-                                                        alert('请先在设置中配置 Asset API AK/SK');
+                                                    if (!assetApiKey) {
+                                                        alert('请先在设置中配置玄上之音 API Key');
                                                         return;
                                                     }
                                                     setCreateGroupSubmitting(true);
                                                     try {
-                                                        const group = await fetchCreateAssetGroup(createGroupName.trim(), createGroupDesc.trim(), assetApiKey, assetApiSecret);
+                                                        const group = await fetchCreateAssetGroup(createGroupName.trim(), createGroupDesc.trim(), assetApiKey);
                                                         setSeedanceCharacterLibrary(prev => [...prev, { id: group.id, name: createGroupName.trim(), description: createGroupDesc.trim(), assets: [] }]);
                                                         setCreateCharacterOpen(false);
                                                         setCreateGroupName('');
@@ -15215,7 +15465,25 @@ You must design a visual composition that tells the story through **8 distinct p
                             <Modal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} title="模型接口配置" theme={theme}>
                                 <div className="p-4 space-y-3">
                                     <div className="mb-2">
-                                        <label className={`text-[10px] font-medium uppercase tracking-wider ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-600'}`}>Asset API Access Key (AK)</label>
+                                        <label className={`text-[10px] font-medium uppercase tracking-wider ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-600'}`}>玄上之音接入点</label>
+                                        <div className="mt-1 flex gap-2">
+                                            <input
+                                                type="text"
+                                                value={xszyBaseUrl}
+                                                onChange={(e) => {
+                                                    setXszyBaseUrl(e.target.value);
+                                                }}
+                                                className={`flex-1 rounded px-2 py-1 text-xs outline-none focus:border-blue-600/50 border ${
+                                                    theme === 'dark'
+                                                        ? 'bg-zinc-900 border-zinc-800 text-zinc-300'
+                                                        : 'bg-white border-zinc-300 text-zinc-900'
+                                                }`}
+                                                placeholder="例如 https://www.xszy.top"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="mb-2">
+                                        <label className={`text-[10px] font-medium uppercase tracking-wider ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-600'}`}>玄上之音 API Key</label>
                                         <div className="mt-1 flex gap-2">
                                             <input
                                                 type="password"
@@ -15229,26 +15497,7 @@ You must design a visual composition that tells the story through **8 distinct p
                                                         ? 'bg-zinc-900 border-zinc-800 text-zinc-300'
                                                         : 'bg-white border-zinc-300 text-zinc-900'
                                                 }`}
-                                                placeholder="用于 Seedance 资产导入节点拉取素材信息"
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="mb-2">
-                                        <label className={`text-[10px] font-medium uppercase tracking-wider ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-600'}`}>Asset API Secret Key (SK)</label>
-                                        <div className="mt-1 flex gap-2">
-                                            <input
-                                                type="password"
-                                                value={assetApiSecret}
-                                                onChange={(e) => {
-                                                    setAssetApiSecret(e.target.value);
-                                                    localStorage.setItem('tapnow_asset_api_sk', e.target.value);
-                                                }}
-                                                className={`flex-1 rounded px-2 py-1 text-xs outline-none focus:border-blue-600/50 border ${
-                                                    theme === 'dark'
-                                                        ? 'bg-zinc-900 border-zinc-800 text-zinc-300'
-                                                        : 'bg-white border-zinc-300 text-zinc-900'
-                                                }`}
-                                                placeholder="用于 Seedance 资产导入节点拉取素材信息"
+                                                placeholder="用于玄上之音素材管理与 Seedance 视频生成"
                                             />
                                         </div>
                                     </div>
@@ -15256,10 +15505,10 @@ You must design a visual composition that tells the story through **8 distinct p
                                         <div className="flex items-center justify-between">
                                             <div className="flex-1">
                                                 <label className={`text-[10px] font-medium uppercase tracking-wider ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-600'}`}>
-                                                    Ark 图像模型 Key 共享
+                                                    玄上之音模型 Key 共享
                                                 </label>
                                                 <p className={`text-[10px] mt-0.5 ${theme === 'dark' ? 'text-zinc-600' : 'text-zinc-500'}`}>
-                                                    Seedream 4.0 / 4.5 / 5.0 与 Seedance 2.0 / 2.0 Fast 共用同一套火山 Ark API Key。
+                                                    Seedream 4.0 / 4.5 / 5.0 与 Seedance 2.0 / 2.0 Fast 共用同一套玄上之音 API Key。
                                                 </p>
                                             </div>
                                             <div className={`px-2 py-1 rounded text-[10px] border ${
@@ -15332,31 +15581,10 @@ You must design a visual composition that tells the story through **8 distinct p
                                                     ))}
                                                 </select>
                                             </div>
-                                            <div className="pt-2 border-t border-dashed border-zinc-700/50 mt-2">
-                                                <div className="flex items-center gap-2 mb-2">
-                                                    <div className={`w-1.5 h-1.5 rounded-full ${theme === 'dark' ? 'bg-pink-400' : 'bg-pink-500'}`}></div>
-                                                    <span className={`text-xs font-bold ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`}>奶昔图床</span>
-                                                </div>
-                                                <div className="grid grid-cols-4 items-center gap-2">
-                                                    <label className={`text-[10px] font-medium uppercase tracking-wider text-right ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-600'}`}>
-                                                        API Key
-                                                    </label>
-                                                    <input
-                                                        type="password"
-                                                        value={tempHostingConfig.naixiKey}
-                                                        onChange={(e) => setTempHostingConfig(prev => ({ ...prev, naixiKey: e.target.value }))}
-                                                        placeholder="输入奶昔图床 API Key..."
-                                                        className={`col-span-3 w-full rounded px-2 py-1 text-xs outline-none focus:border-blue-600/50 border ${
-                                                            theme === 'dark'
-                                                                ? 'bg-zinc-900 border-zinc-800 text-zinc-300'
-                                                                : 'bg-white border-zinc-300 text-zinc-900'
-                                                        }`}
-                                                    />
-                                                </div>
-                                            </div>
+
                                         </div>
                                         <div className={`mt-3 text-[10px] ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-500'}`}>
-                                            图片/视频优先使用奶昔图床（需配置 Key），失败自动切回 Litterbox；音频始终使用 Litterbox。
+                                            首选 Litterbox 临时图床，失败时自动尝试玄上之音自带文件上传（需配置玄上之音 API Key）。
                                         </div>
                                     </div>
                                     <div className="flex justify-between items-center mb-2">
@@ -15409,12 +15637,12 @@ You must design a visual composition that tells the story through **8 distinct p
                                                     {[
                                                         { key: 'provider', label: '显示名称', type: 'text', placeholder: 'My Model' },
                                                         { key: 'modelName', label: 'Model ID', type: 'text', placeholder: 'model-id' },
-                                                        {
+                                                        ...(api.id.includes('seedream') || api.id.includes('seedance') ? [] : [{
                                                             key: 'key',
-                                                            label: (api.id.includes('seedream') || api.id.includes('seedance')) ? 'API Key（Ark 共用）' : 'API Key',
+                                                            label: 'API Key',
                                                             type: 'password',
                                                             placeholder: api.id.includes('rh-image') ? '粘贴 RunningHub Key...' : 'sk-...'
-                                                        },
+                                                        }]),
                                                         { key: 'url', label: 'Base URL', type: 'text', placeholder: 'https://...' },
                                                     ].map((field) => (
                                                         <div key={field.key} className="grid grid-cols-4 items-center gap-2">
@@ -15427,16 +15655,6 @@ You must design a visual composition that tells the story through **8 distinct p
                                                                 onChange={(e) => {
                                                                     const newValue = e.target.value;
                                                                     updateApiConfig(api.id, { [field.key]: newValue });
-                                                                    
-                                                                    if (field.key === 'key' && (api.id.includes('seedream') || api.id.includes('seedance')) && newValue && newValue.trim().length > 0) {
-                                                                        const trimmed = newValue.trim();
-                                                                        localStorage.setItem('tapnow_ark_media_api_key', trimmed);
-                                                                        setApiConfigs((prev) => prev.map((c) =>
-                                                                            (c.id.includes('seedream') || c.id.includes('seedance')) && c.key !== trimmed
-                                                                                ? { ...c, key: trimmed }
-                                                                                : c
-                                                                        ));
-                                                                    }
                                                                 }}
                                                                 className={`col-span-3 w-full rounded px-2 py-1 text-xs outline-none focus:border-blue-600/50 border ${
                                                                     theme === 'dark'
