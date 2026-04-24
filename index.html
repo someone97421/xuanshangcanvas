@@ -2378,83 +2378,30 @@ You must design a visual composition that tells the story through **8 distinct p
                         return;
                     }
 
-                    // 检查鼠标是否在视频输入、视频拆解或智能分镜表节点内
+                    // 检查鼠标是否直接在可滚动元素内
                     const target = e.target;
                     const scrollLockElement = target?.closest?.('[data-scroll-lock="true"]');
                     if (scrollLockElement) {
                         return;
                     }
-                    let isInsideNode = false;
                     let scrollableElement = null;
-                    
-                    // 向上查找父元素，检查是否在 video-input、video-analyze 或 storyboard-node 节点内
+
+                    // 从事件目标向上查找，检查鼠标是否直接在可滚动元素内
                     let current = target;
                     while (current && current !== canvasElement) {
                         if (current.classList) {
-                            // 检查是否是智能分镜表容器（通过检查是否有特定的类组合）
-                            const isStoryboardContainer = current.classList.contains('flex') && 
-                                                         current.classList.contains('flex-col') && 
-                                                         current.classList.contains('h-full') && 
-                                                         current.classList.contains('rounded-xl') &&
-                                                         current.classList.contains('overflow-hidden');
-                            
-                            // 检查当前元素或父元素是否包含节点容器类
-                            if (current.classList.contains('video-input-container') || 
-                                current.classList.contains('video-analyze-container') ||
-                                isStoryboardContainer) {
-                                isInsideNode = true;
-                                
-                                // 如果是智能分镜表，查找特定的滚动容器
-                                if (isStoryboardContainer) {
-                                    scrollableElement = current.querySelector('.flex-1.overflow-y-auto.custom-scrollbar');
-                                    if (!scrollableElement) {
-                                        scrollableElement = current.querySelector('.flex-1.overflow-y-auto');
-                                    }
-                                } else {
-                                // 在当前容器内查找可滚动的元素
-                                scrollableElement = current.querySelector('.overflow-y-auto, .custom-scrollbar, [class*="overflow-y"]');
-                                if (!scrollableElement) {
-                                    // 如果没找到，检查当前元素本身是否可滚动
-                                    const style = window.getComputedStyle(current);
-                                    if (style.overflowY === 'auto' || style.overflowY === 'scroll' || 
-                                        current.classList.contains('custom-scrollbar')) {
-                                        scrollableElement = current;
-                                        }
-                                    }
-                                }
-                                break;
-                            }
-                            
-                            // 使用 closest 方法查找最近的容器
-                            const container = current.closest('.video-input-container, .video-analyze-container');
-                            if (container) {
-                                isInsideNode = true;
-                                scrollableElement = container.querySelector('.overflow-y-auto, .custom-scrollbar, [class*="overflow-y"]');
-                                if (!scrollableElement) {
-                                    const style = window.getComputedStyle(container);
-                                    if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
-                                        scrollableElement = container;
-                                    }
-                                }
-                                break;
-                            }
-                            
-                            // 检查是否是智能分镜表容器
-                            const storyboardContainer = current.closest('.flex.flex-col.h-full.rounded-xl.overflow-hidden');
-                            if (storyboardContainer) {
-                                isInsideNode = true;
-                                scrollableElement = storyboardContainer.querySelector('.flex-1.overflow-y-auto.custom-scrollbar');
-                                if (!scrollableElement) {
-                                    scrollableElement = storyboardContainer.querySelector('.flex-1.overflow-y-auto');
-                                }
+                            const style = window.getComputedStyle(current);
+                            if ((style.overflowY === 'auto' || style.overflowY === 'scroll') &&
+                                current.scrollHeight > current.clientHeight) {
+                                scrollableElement = current;
                                 break;
                             }
                         }
                         current = current.parentElement;
                     }
-                    
-                    // 如果在节点内且找到可滚动元素，则滚动该元素而不是缩放画布
-                    if (isInsideNode && scrollableElement) {
+
+                    // 如果鼠标在可滚动元素内，则滚动该元素；否则缩放画布
+                    if (scrollableElement) {
                         try {
                             if (e.cancelable) {
                                 e.preventDefault();
@@ -2532,50 +2479,26 @@ You must design a visual composition that tells the story through **8 distinct p
                     return;
                 }
 
-                // 检查鼠标是否在视频输入或视频拆解节点内
+                // 检查鼠标是否直接在可滚动元素内
                 const target = e.target;
-                let isInsideNode = false;
                 let scrollableElement = null;
-                
-                // 向上查找父元素，检查是否在 video-input 或 video-analyze 节点内
+
+                // 从事件目标向上查找，检查鼠标是否直接在可滚动元素内
                 let current = target;
                 while (current && current !== e.currentTarget) {
                     if (current.classList) {
-                        // 检查当前元素或父元素是否包含节点容器类
-                        if (current.classList.contains('video-input-container') || 
-                            current.classList.contains('video-analyze-container')) {
-                            isInsideNode = true;
-                            // 在当前容器内查找可滚动的元素
-                            scrollableElement = current.querySelector('.overflow-y-auto, .custom-scrollbar, [class*="overflow-y"]');
-                            if (!scrollableElement) {
-                                // 如果没找到，检查当前元素本身是否可滚动
-                                const style = window.getComputedStyle(current);
-                                if (style.overflowY === 'auto' || style.overflowY === 'scroll' || 
-                                    current.classList.contains('custom-scrollbar')) {
-                                    scrollableElement = current;
-                                }
-                            }
-                            break;
-                        }
-                        // 使用 closest 方法查找最近的容器
-                        const container = current.closest('.video-input-container, .video-analyze-container');
-                        if (container) {
-                            isInsideNode = true;
-                            scrollableElement = container.querySelector('.overflow-y-auto, .custom-scrollbar, [class*="overflow-y"]');
-                            if (!scrollableElement) {
-                                const style = window.getComputedStyle(container);
-                                if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
-                                    scrollableElement = container;
-                                }
-                            }
+                        const style = window.getComputedStyle(current);
+                        if ((style.overflowY === 'auto' || style.overflowY === 'scroll') &&
+                            current.scrollHeight > current.clientHeight) {
+                            scrollableElement = current;
                             break;
                         }
                     }
                     current = current.parentElement;
                 }
-                
-                // 如果在节点内且找到可滚动元素，则滚动该元素而不是缩放画布
-                if (isInsideNode && scrollableElement) {
+
+                // 如果鼠标在可滚动元素内，则滚动该元素；否则缩放画布
+                if (scrollableElement) {
                     try {
                         if (e.cancelable) {
                             e.preventDefault();
